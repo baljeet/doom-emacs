@@ -1,6 +1,6 @@
 ;;; lang/org/config.el -*- lexical-binding: t; -*-
 
-(defvar +org-dir (expand-file-name "~/work/org/")
+(defvar +org-dir (expand-file-name "~/org/")
   "The directory where org files are kept.")
 
 ;; Ensure ELPA org is prioritized above built-in org.
@@ -114,6 +114,11 @@ unfold to point on startup."
 `org-indent-mode', so we simply turn off show-paren-mode altogether."
   (set (make-local-variable 'show-paren-mode) nil))
 
+(defun my/org-add-ids-to-headlines-in-file ()
+  "Add ID properties to all headlines in the current file which
+   do not already have one."
+  (interactive)
+  (org-map-entries 'org-id-get-create))
 
 ;;
 (defun +org-init-ui ()
@@ -127,6 +132,7 @@ unfold to point on startup."
    org-cycle-include-plain-lists t
    org-cycle-separator-lines 1
    org-entities-user '(("flat"  "\\flat" nil "" "" "266D" "♭") ("sharp" "\\sharp" nil "" "" "266F" "♯"))
+   org-enforce-todo-dependencies t
    ;; org-ellipsis " ... "
    org-fontify-done-headline t
    org-fontify-quote-and-verse-blocks t
@@ -139,15 +145,17 @@ unfold to point on startup."
    org-image-actual-width nil
    org-indent-indentation-per-level 2
    org-indent-mode-turns-on-hiding-stars t
+   org-insert-heading-respect-content t
    org-pretty-entities nil
    org-pretty-entities-include-sub-superscripts t
    org-priority-faces
    `((?a . ,(face-foreground 'error))
      (?b . ,(face-foreground 'warning))
      (?c . ,(face-foreground 'success)))
+   org-refile-targets (quote ( (org-agenda-files :maxlevel . 5) ))
    org-startup-folded t
    org-startup-indented t
-   org-startup-with-inline-images nil
+   org-startup-with-inline-images t
    org-tags-column 0
    org-todo-keywords
    '((sequence "[ ](t)" "[-](p)" "[?](m)" "|" "[X](d)")
@@ -166,6 +174,10 @@ unfold to point on startup."
               :background (face-attribute (or (cadr (assq 'default face-remapping-alist))
                                               'default)
                                           :background nil t)))
+  (add-hook 'org-capture-prepare-finalize-hook 'org-id-get-create)
+  (add-hook 'org-mode-hook
+            (lambda ()
+              (add-hook 'before-save-hook 'my/org-add-ids-to-headlines-in-file nil 'local)))
 
   ;; Custom links
   (org-link-set-parameters

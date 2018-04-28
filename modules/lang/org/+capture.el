@@ -16,13 +16,26 @@
 (defvar +org-default-notes-file "notes.org"
   "TODO")
 
+(defvar my/org-meeting-template "** Meeting about %^{something}
+SCHEDULED: %<%Y-%m-%d %H:%M>
+*Attendees:*
+- [X] Baljeet
+- [ ] %?
+*Agenda:*
+-
+-
+*Notes:*
+" "Meeting Template")
 (defvar org-capture-templates
   '(("t" "Todo" entry
-     (file+headline +org-default-todo-file "Inbox")
-     "* [ ] %?\n%i" :prepend t :kill-buffer t)
+     (file+headline "~/org/todos.org" "Tasks")
+     "* [ ] %?\n%i" :clock-in t :clock-resume t :prepend t :kill-buffer t)
+
+    ("m" "Meeting" entry (file+headline "~/org/meetings.org" "Meeting Notes")
+     ,my/org-meeting-template)
 
     ("n" "Notes" entry
-     (file+headline +org-default-notes-file "Inbox")
+     (file+headline "~/org/notes.org" "Notes")
      "* %u %?\n%i" :prepend t :kill-buffer t)))
 
 

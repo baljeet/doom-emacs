@@ -49,6 +49,7 @@ immediately runs it on the current candidate (ending the ivy session)."
         [remap switch-to-buffer]          #'ivy-switch-buffer
         [remap persp-switch-to-buffer]    #'+ivy/switch-workspace-buffer
         [remap recentf-open-files]        #'counsel-recentf
+        [remap org-capture]               #'counsel-org-capture
         [remap imenu]                     #'counsel-imenu
         [remap bookmark-jump]             #'counsel-bookmark
         [remap projectile-find-file]      #'counsel-projectile-find-file
