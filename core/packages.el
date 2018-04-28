@@ -29,7 +29,7 @@
 (package! command-log-mode)
 (package! editorconfig)
 (package! expand-region)
-(package! help-fns+)
+(package! helpful)
 (package! pcre2el)
 (package! smart-forward)
 (package! smartparens)
@@ -42,3 +42,4 @@
 ;; core-keybinds.el
 (package! which-key)
 (package! hydra)
+(package! company-ycmd)

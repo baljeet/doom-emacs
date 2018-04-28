@@ -1,10 +1,23 @@
 ;;; lang/typescript/config.el -*- lexical-binding: t; -*-
-
+(defun setup-tide-mode ()
+  (interactive)
+  (tide-setup)
+  (flycheck-mode +1)
+  (setq flycheck-check-syntax-automatically '(save mode-enabled))
+  (eldoc-mode +1)
+  (tide-hl-identifier-mode +1)
+  (setq tide-tsserver-executable  "/Users/baljeetkumar/.nvm/versions/node/v8.9.4/lib/node_modules/typescript/bin/tsserver")
+  ;; company is an optional dependency. You have to
+  ;; install it separately via package-install
+  ;; `M-x package-install [ret] company`
+  (company-mode +1))
 (def-package! typescript-mode
   :mode "\\.ts$"
   :config
   (add-hook 'typescript-mode-hook #'rainbow-delimiters-mode)
-
+  (add-hook 'before-save-hook 'tide-format-before-save)
+  (add-hook 'typescript-mode-hook 'ycmd-mode)
+  (add-hook 'typescript-mode-hook #'setup-tide-mode)
   (set! :electric 'typescript-mode :chars '(?\} ?\)) :words '("||" "&&"))
 
   ;; TODO tide-jump-back
@@ -43,3 +56,7 @@
       (setq tide-project-root (doom-project-root))))
   (add-hook! (typescript-mode web-mode) #'+typescript|init-tide))
 
+;; aligns annotation to the right hand side
+(setq company-tooltip-align-annotations t)
+; /Users/baljeetkumar/.nvm/versions/node/v8.9.4/lib/node_modules/typescript/bin/tsserver
+;; formats the buffer before saving

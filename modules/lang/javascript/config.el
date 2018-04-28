@@ -7,7 +7,7 @@
   (setq js2-skip-preprocessor-directives t
         js2-highlight-external-variables nil
         js2-mode-show-parse-errors nil)
-
+  (add-hook 'js2-mode-hook 'ycmd-mode)
   (add-hook! 'js2-mode-hook
     #'(flycheck-mode highlight-indentation-mode rainbow-delimiters-mode))
 
@@ -206,4 +206,5 @@
 
 (def-project-mode! +javascript-eslintd-fix-mode
   :add-hooks (eslintd-fix-mode))
-
+(def-project-mode! +javascript-eslintd-fix-mode
+  :add-hooks (eslintd-fix-mode))
