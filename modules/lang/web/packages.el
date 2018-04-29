@@ -20,4 +20,4 @@
 (package! less-css-mode)
 (package! sass-mode)
 (package! stylus-mode)
-
+(package! ng2-mode)

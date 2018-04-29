@@ -1,25 +1,23 @@
 ;;; lang/org/+babel.el -*- lexical-binding: t; -*-
 
 (defvar +org-babel-languages
-  '(calc
+  '(browser
+    calc
     css
     emacs-lisp
-    haskell
     js
     latex
     ledger
-    lilypond
     lisp
-    matlab
     plantuml
     python
     restclient ; ob-restclient
-    ruby
     rust       ; ob-rust
     shell
     sqlite
     sql-mode   ; ob-sql-mode
-    translate) ; ob-translate
+    translate
+    typescript) ; ob-translate
   "A list of org-babel languages to load.")
 
 
@@ -34,7 +32,12 @@
    'org-babel-load-languages
    (cl-loop for sym in +org-babel-languages
             collect (cons sym t)))
-
+  (add-to-list 'org-structure-template-alist
+               '("el"  "#+BEGIN_SRC emacs-lisp\n?\n#+END_SRC" "<src lang=\"?\">\n\n</src>"))
+  (add-to-list 'org-structure-template-alist
+               '("pg"  "#+BEGIN_SRC sql :engine postgresql\n?\n#+END_SRC" "<src lang=\"?\">\n\n</src>"))
+  (add-to-list 'org-structure-template-alist
+               '("js"  "#+BEGIN_SRC js\n?\n#+END_SRC" "<src lang=\"?\">\n\n</src>"))
   ;; I prefer C-c C-c for confirming over the default C-c '
   (map! :map org-src-mode-map "C-c C-c" #'org-edit-src-exit)
 

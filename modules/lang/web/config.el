@@ -3,7 +3,6 @@
 (load! +html)
 (load! +css)
 
-
 (def-package! web-beautify
   :commands (web-beautify-html web-beautify-css)
   :init
@@ -28,6 +27,9 @@
 ;;
 ;; Frameworks
 ;;
+(def-project-mode! +web-angular5-mode
+  :modes(ng2-mode)
+  :when (+javascript-npm-dep-p '@angular/core))
 
 (def-project-mode! +web-angularjs-mode
   :modes (+javascript-npm-mode)

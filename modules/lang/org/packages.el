@@ -24,7 +24,9 @@
   (package! ob-restclient)
   (package! ob-rust)
   (package! ob-sql-mode)
-  (package! ob-translate))
+  (package! ob-translate)
+  (package! ob-browser)
+  (package! ob-typescript))
 
 (when (featurep! +export)
   (package! ox-pandoc))

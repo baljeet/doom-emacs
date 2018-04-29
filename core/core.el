@@ -185,7 +185,7 @@ ability to invoke the debugger in debug mode."
         (run-hook-wrapped hook #'doom-try-run-hook hook)))
 
     ;; If you forget to reset this, you'll get stuttering and random freezes!
-    (setq gc-cons-threshold 16777216
+    (setq gc-cons-threshold 100000000;16777216
           gc-cons-percentage 0.1
           file-name-handler-alist doom--file-name-handler-alist)
     t)

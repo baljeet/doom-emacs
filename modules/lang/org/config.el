@@ -16,7 +16,6 @@
 (if (featurep! +present) (load! +present))
 ;; TODO (if (featurep! +publish) (load! +publish))
 
-
 ;;
 ;; Plugins
 ;;
@@ -32,7 +31,6 @@
 
 (def-package! org-bullets
   :commands org-bullets-mode)
-
 
 ;;
 ;; Bootstrap
@@ -120,6 +118,15 @@ unfold to point on startup."
   (interactive)
   (org-map-entries 'org-id-get-create))
 
+(defun my/org-mode-ask-effort ()
+  "Ask for an effort estimate when clocking in."
+  (unless (org-entry-get (point) "Effort")
+    (let ((effort
+           (completing-read
+            "Effort: "
+            (org-entry-get-multivalued-property (point) "Effort"))))
+      (unless (equal effort "")
+        (org-set-property "Effort" effort)))))
 ;;
 (defun +org-init-ui ()
   "Configures the UI for `org-mode'."
@@ -129,15 +136,25 @@ unfold to point on startup."
    org-agenda-files (directory-files +org-dir t "\\.org$" t)
    org-agenda-inhibit-startup t
    org-agenda-skip-unavailable-files nil
+   org-clock-idle-time nil
+   org-clock-continuously nil
+   org-clock-persist t
+   org-clock-in-switch-to-state "STARTED"
+   org-clock-in-resume nil
+   org-clock-into-drawer 1
+   org-clock-report-include-clocking-task t
    org-cycle-include-plain-lists t
    org-cycle-separator-lines 1
+   org-default-notes-file "~/org/notes.org"
    org-entities-user '(("flat"  "\\flat" nil "" "" "266D" "♭") ("sharp" "\\sharp" nil "" "" "266F" "♯"))
    org-enforce-todo-dependencies t
+   org-expiry-inactive-timestamps t
    ;; org-ellipsis " ... "
    org-fontify-done-headline t
    org-fontify-quote-and-verse-blocks t
    org-fontify-whole-heading-line t
    org-footnote-auto-label 'plain
+   org-global-properties '(("Effort_ALL". "0 0:10 0:20 0:30 1:00 2:00 3:00 4:00 6:00 8:00"))
    org-hidden-keywords nil
    org-hide-emphasis-markers nil
    org-hide-leading-stars t
@@ -146,6 +163,8 @@ unfold to point on startup."
    org-indent-indentation-per-level 2
    org-indent-mode-turns-on-hiding-stars t
    org-insert-heading-respect-content t
+   org-log-done 'time
+   org-log-into-drawer "LOGBOOK"
    org-pretty-entities nil
    org-pretty-entities-include-sub-superscripts t
    org-priority-faces
@@ -153,15 +172,36 @@ unfold to point on startup."
      (?b . ,(face-foreground 'warning))
      (?c . ,(face-foreground 'success)))
    org-refile-targets (quote ( (org-agenda-files :maxlevel . 5) ))
+   org-show-notification-handler 'message
    org-startup-folded t
    org-startup-indented t
    org-startup-with-inline-images t
    org-tags-column 0
+   org-tag-alist '(("@work" . ?b)
+                      ("@home" . ?h)
+                      ("@writing" . ?w)
+                      ("@errands" . ?e)
+                      ("@coding" . ?c)
+                      ("@phone" . ?p)
+                      ("@reading" . ?r)
+                      ("@computer" . ?l)
+                      ("quantified" . ?q)
+                      ("fuzzy" . ?0)
+                      ("highenergy" . ?1))
    org-todo-keywords
-   '((sequence "[ ](t)" "[-](p)" "[?](m)" "|" "[X](d)")
-     (sequence "TODO(T)" "|" "DONE(D)")
-     (sequence "NEXT(n)" "ACTIVE(a)" "WAITING(w)" "LATER(l)" "|" "CANCELLED(c)"))
+   '((sequence
+      "TODO(t)"  ; next action
+      "STARTED(s)"
+      "WAITING(w@/!)"
+      "SOMEDAY(.)" "|" "DONE(x!)" "CANCELLED(c@)")
+     (sequence "TODELEGATE(-)" "DELEGATED(d)" "|" "COMPLETE(x)"))
+   org-todo-keyword-faces
+   '(("TODO" . (:foreground "green" :weight bold))
+     ("DONE" . (:foreground "cyan" :weight bold))
+     ("WAITING" . (:foreground "red" :weight bold))
+     ("SOMEDAY" . (:foreground "gray" :weight bold)))
    org-use-sub-superscripts '{}
+   org-use-effective-time t
    outline-blank-line t
 
    ;; LaTeX previews are too small and usually render to light backgrounds, so
@@ -178,7 +218,27 @@ unfold to point on startup."
   (add-hook 'org-mode-hook
             (lambda ()
               (add-hook 'before-save-hook 'my/org-add-ids-to-headlines-in-file nil 'local)))
+(add-hook 'org-clock-in-prepare-hook
+          'my/org-mode-ask-effort)
+(add-to-list 'auto-mode-alist '("\\.txt$" . org-mode))
+;;;;;;
+(setq org-agenda-span 2)
+(setq org-agenda-tags-column -100) ; take advantage of the screen width
+(setq org-agenda-sticky nil)
+(setq org-agenda-inhibit-startup t)
+(setq org-agenda-use-tag-inheritance t)
+(setq org-agenda-show-log t)
+(setq org-agenda-skip-scheduled-if-done t)
+(setq org-agenda-skip-deadline-if-done t)
+(setq org-agenda-skip-deadline-prewarning-if-scheduled 'pre-scheduled)
+(setq org-agenda-time-grid
+      '((daily today require-timed)
+       "----------------"
+       (800 1000 1200 1400 1600 1800)))
+(setq org-columns-default-format "%14SCHEDULED %Effort{:} %1PRIORITY %TODO %50ITEM %TAGS")
 
+
+;;;;;;
   ;; Custom links
   (org-link-set-parameters
    "org"
@@ -242,6 +302,7 @@ between the two."
 
         (:after org-agenda
           (:map org-agenda-mode-map
+            :e "i" #'org-agenda-clock-in
             :e "<escape>" #'org-agenda-Quit
             :e "m"   #'org-agenda-month-view
             :e "C-j" #'org-agenda-next-item
@@ -254,7 +315,7 @@ between the two."
   "Getting org to behave."
   ;; Don't open separate windows
   (push '(file . find-file) org-link-frame-setup)
-
+  (org-clock-persistence-insinuate)
   ;; Let OS decide what to do with files when opened
   (setq org-file-apps
         `(("\\.org$" . emacs)
