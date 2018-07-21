@@ -34,6 +34,11 @@ See `doom-real-buffer-p' for more information.")
   "The name of the buffer to fall back to if no other buffers exist (will create
 it if it doesn't exist).")
 
+;;;###autoload
+(defvar doom-cleanup-hook ()
+  "A list of hooks run when `doom/cleanup-session' is run, meant to clean up
+leftover buffers and processes.")
+
 
 ;;
 ;; Functions
@@ -75,7 +80,12 @@ If no project is active, return all buffers."
 ;;;###autoload
 (defun doom-special-buffer-p (buf)
   "Returns non-nil if BUF's name starts and ends with an *."
-  (string-match-p "^\\s-*\\*" (buffer-name buf)))
+  (equal (substring (buffer-name buf) 0 1) "*"))
+
+;;;###autoload
+(defun doom-temp-buffer-p (buf)
+  "Returns non-nil if BUF is temporary."
+  (equal (substring (buffer-name buf) 0 1) " "))
 
 ;;;###autoload
 (defun doom-non-file-visiting-buffer-p (buf)
@@ -88,7 +98,7 @@ If no project is active, return all buffers."
   (cl-remove-if-not #'doom-real-buffer-p (or buffer-list (doom-buffer-list))))
 
 ;;;###autoload
-(defun doom-real-buffer-p (&optional buffer-or-name)
+(defun doom-real-buffer-p (buffer-or-name)
   "Returns t if BUFFER-OR-NAME is a 'real' buffer.
 
 A real buffer is a useful buffer; a first class citizen in Doom. Real ones
@@ -105,10 +115,21 @@ The exact criteria for a real buffer is:
      non-nil.
 
 If BUFFER-OR-NAME is omitted or nil, the current buffer is tested."
-  (when-let* ((buf (ignore-errors (window-normalize-buffer buffer-or-name))))
-    (or (buffer-local-value 'doom-real-buffer-p buf)
-        (run-hook-with-args-until-success 'doom-real-buffer-functions buf)
-        (not (run-hook-with-args-until-success 'doom-unreal-buffer-functions buf)))))
+  (or (bufferp buffer-or-name)
+      (stringp buffer-or-name)
+      (signal 'wrong-type-argument (list '(bufferp stringp) buffer-or-name)))
+  (when-let* ((buf (get-buffer buffer-or-name)))
+    (and (not (doom-temp-buffer-p buf))
+         (or (buffer-local-value 'doom-real-buffer-p buf)
+             (run-hook-with-args-until-success 'doom-real-buffer-functions buf)
+             (not (run-hook-with-args-until-success 'doom-unreal-buffer-functions buf))))))
+
+;;;###autoload
+(defun doom-unreal-buffer-p (buffer-or-name)
+  "Return t if BUFFER-OR-NAME is an 'unreal' buffer.
+
+See `doom-real-buffer-p' for details on what that means."
+  (not (doom-real-buffer-p buffer-or-name)))
 
 ;;;###autoload
 (defun doom-buffers-in-mode (modes &optional buffer-list derived-p)
@@ -128,7 +149,8 @@ If DERIVED-P, test with `derived-mode-p', otherwise use `eq'."
 (defun doom-visible-windows (&optional window-list)
   "Return a list of the visible, non-popup (dedicated) windows."
   (cl-loop for window in (or window-list (window-list))
-           unless (window-dedicated-p window)
+           when (or (window-parameter window 'visible)
+                    (not (window-dedicated-p window)))
            collect window))
 
 ;;;###autoload
@@ -171,6 +193,16 @@ regex PATTERN. Returns the number of killed buffers."
   (let ((buffers (doom-matching-buffers pattern buffer-list)))
     (dolist (buf buffers (length buffers))
       (kill-buffer buf))))
+
+
+;;
+;; Hooks
+;;
+
+;;;###autoload
+(defun doom|mark-buffer-as-real ()
+  "Hook function that marks the current buffer as real."
+  (doom-set-buffer-real (current-buffer) t))
 
 
 ;;
@@ -243,8 +275,11 @@ ALL-P (universal argument), clean them up globally."
   (interactive)
   (let ((buffers (doom-buried-buffers buffer-list))
         (n 0))
-    (mapc #'kill-buffer buffers)
-    (setq n (+ n (length buffers) (doom/cleanup-buffer-processes)))
+    (dolist (buf buffers)
+      (unless (buffer-modified-p buf)
+        (kill-buffer buf)
+        (cl-incf n)))
+    (setq n (+ n (doom/cleanup-buffer-processes)))
     (dolist (hook doom-cleanup-hook)
       (let ((m (funcall hook)))
         (when (integerp m)

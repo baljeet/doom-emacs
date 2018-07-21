@@ -1,5 +1,8 @@
 ;;; app/twitter/autoload.el -*- lexical-binding: t; -*-
 
+(defvar +twitter-workspace-name "*Twitter*"
+  "The name to use for the twitter workspace.")
+
 ;;;###autoload
 (defun +twitter-display-buffer (buf)
   "A replacement display-buffer command for `twittering-pop-to-buffer-function'
@@ -20,13 +23,18 @@ that works with the feature/popup module."
 ;; Commands
 ;;
 
+(defvar +twitter--old-wconf nil)
 ;;;###autoload
-(defun =twitter ()
+(defun =twitter (arg)
   "Opens a workspace dedicated to `twittering-mode'."
-  (interactive)
+  (interactive "P")
   (condition-case _
       (progn
-        (+workspace/new "*Twitter*")
+        (if (and (not arg) (featurep! :feature workspaces))
+            (+workspace/new +twitter-workspace-name)
+          (setq +twitter--old-wconf (current-window-configuration))
+          (delete-other-windows)
+          (switch-to-buffer (doom-fallback-buffer)))
         (call-interactively #'twit)
         (unless (get-buffer (car twittering-initial-timeline-spec-string))
           (error "Failed to open twitter"))
@@ -44,13 +52,20 @@ that works with the feature/popup module."
   (interactive)
   (when (eq major-mode 'twittering-mode)
     (twittering-kill-buffer)
-    (+workspace/close-window-or-workspace)))
+    (cond ((one-window-p) (+twitter/quit-all))
+          ((featurep! :feature workspaces)
+           (+workspace/close-window-or-workspace))
+          ((delete-window)))))
 
 ;;;###autoload
 (defun +twitter/quit-all ()
   "Close all open `twitter-mode' buffers and the associated workspace, if any."
   (interactive)
-  (+workspace/delete "*Twitter*")
+  (when (featurep! :feature workspaces)
+    (+workspace/delete +twitter-workspace-name))
+  (when +twitter--old-wconf
+    (set-window-configuration +twitter--old-wconf)
+    (setq +twitter--old-wconf nil))
   (dolist (buf (doom-buffers-in-mode 'twittering-mode (buffer-list) t))
     (twittering-kill-buffer buf)))
 
@@ -62,4 +77,27 @@ that works with the feature/popup module."
     (with-current-buffer buf
       (twittering-rerender-timeline-all buf)
       (setq-local line-spacing 0.2)
-      (goto-line 0 buf))))
+      (goto-char (point-min)))))
+
+;;;###autoload
+(defun +twitter/ace-link ()
+  "Open a visible link, username or hashtag in a `twittering-mode' buffer."
+  (interactive)
+  (let ((pt (avy-with +twitter/ace-link
+              (avy--process
+               (+twitter--collect-links)
+               (avy--style-fn avy-style)))))
+    (when (number-or-marker-p pt)
+      (goto-char pt)
+      (let ((uri (get-text-property (point) 'uri)))
+        (if uri (browse-url uri))))))
+
+(defun +twitter--collect-links ()
+  (let ((end (window-end))
+        points)
+    (save-excursion
+      (goto-char (window-start))
+      (while (and (< (point) end)
+                  (ignore-errors (twittering-goto-next-thing) t))
+        (push (point) points))
+      (nreverse points))))

@@ -16,18 +16,35 @@ is loaded.")
 ;;
 
 (def-package! python
-  :commands python-mode
+  :defer t
   :init
   (setq python-environment-directory doom-cache-dir
         python-indent-guess-indent-offset-verbose nil
         python-shell-interpreter "python")
   :config
-  (add-hook! 'python-mode-hook #'(flycheck-mode highlight-numbers-mode))
+  (add-hook 'python-mode-hook #'highlight-numbers-mode)
 
-  (set! :env "PYTHONPATH" "PYENV_ROOT")
-  (set! :company-backend 'python-mode '(company-anaconda))
-  (set! :electric 'python-mode :chars '(?:))
-  (set! :repl 'python-mode #'+python/repl)
+  (set-env! "PYTHONPATH" "PYENV_ROOT")
+  (set-electric! 'python-mode :chars '(?:))
+  (set-repl-handler! 'python-mode #'+python/repl)
+
+  (set-pretty-symbols! 'python-mode
+    ;; Functional
+    :def "def"
+    :lambda "lambda"
+    ;; Types
+    :null "None"
+    :true "True" :false "False"
+    :int "int" :str "str"
+    :float "float"
+    :bool "bool"
+    :tuple "tuple"
+    ;; Flow
+    :not "not"
+    :in "in" :not-in "not in"
+    :and "and" :or "or"
+    :for "for"
+    :return "return" :yield "yield")
 
   (when (executable-find "ipython")
     (setq python-shell-interpreter "ipython"
@@ -50,14 +67,14 @@ is loaded.")
   (add-hook 'python-mode-hook #'+python|add-version-to-modeline)
 
   (if (not (executable-find "pyenv"))
-      (setq +python-current-version (string-trim (shell-command-to-string "python --version 2>&1 | cut -d' ' -f2")))
+      (setq-default +python-current-version (string-trim (shell-command-to-string "python --version 2>&1 | cut -d' ' -f2")))
     (setq +python-pyenv-root     (string-trim (shell-command-to-string "pyenv root"))
           +python-pyenv-versions (split-string (shell-command-to-string "pyenv versions --bare") "\n" t))
 
     (defun +python|detect-pyenv-version ()
       "Detect the pyenv version for the current project and set the relevant
 environment variables."
-      (when-let* ((version-str (shell-command-to-string "python --version 2>&1 | cut -d' ' -f2")))
+      (when-let* ((version-str (shell-command-to-string "PYENV_VERSION= python --version 2>&1 | cut -d' ' -f2")))
         (setq version-str (string-trim version-str)
               +python-current-version version-str)
         (let ((pyenv-current-path (concat +python-pyenv-root "/versions/" version-str)))
@@ -74,18 +91,18 @@ environment variables."
 
 (def-package! anaconda-mode
   :after python
-  :hook python-mode
   :init
   (setq anaconda-mode-installation-directory (concat doom-etc-dir "anaconda/")
         anaconda-mode-eldoc-as-single-line t)
   :config
+  (add-hook 'python-mode-hook #'anaconda-mode)
   (add-hook 'anaconda-mode-hook #'anaconda-eldoc-mode)
-  (set! :popup "^\\*anaconda-mode" nil '((select)))
-  (set! :lookup 'python-mode
+  (set-company-backend! 'python-mode '(company-anaconda))
+  (set-popup-rule! "^\\*anaconda-mode" :select nil)
+  (set-lookup-handlers! 'python-mode
     :definition #'anaconda-mode-find-definitions
     :references #'anaconda-mode-find-references
     :documentation #'anaconda-mode-show-doc)
-  (advice-add #'anaconda-mode-doc-buffer :after #'doom*anaconda-mode-doc-buffer)
 
   (defun +python|auto-kill-anaconda-processes ()
     "Kill anaconda processes if this buffer is the last python buffer."
@@ -94,15 +111,9 @@ environment variables."
                           (doom-buffers-in-mode 'python-mode (buffer-list)))))
       (anaconda-mode-stop)))
   (add-hook! 'python-mode-hook
-    (add-hook 'kill-buffer-hook #'+python|auto-kill-anaconda-processes nil t)))
+    (add-hook 'kill-buffer-hook #'+python|auto-kill-anaconda-processes nil t))
 
-
-(def-package! company-anaconda
-  :when (featurep! :completion company)
-  :after anaconda-mode
-  :config
   (map! :map anaconda-mode-map
-        :n "gf" nil
         :localleader
         :prefix "f"
         :nv "d" #'anaconda-mode-find-definitions
@@ -112,10 +123,6 @@ environment variables."
         :nv "u" #'anaconda-mode-find-references))
 
 
-(def-package! pip-requirements
-  :mode ("/requirements.txt$" . pip-requirements-mode))
-
-
 (def-package! nose
   :commands nose-mode
   :preface
@@ -123,8 +130,8 @@ environment variables."
   :init
   (associate! nose-mode :match "/test_.+\\.py$" :modes (python-mode))
   :config
-  (set! :popup "^\\*nosetests" '((size . 0.4)) '((select)))
-  (set! :yas-minor-mode 'nose-mode)
+  (set-popup-rule! "^\\*nosetests" :size 0.4 :select nil)
+  (set-yas-minor-mode! 'nose-mode)
   (map! :map nose-mode-map
         :localleader
         :prefix "t"
@@ -136,3 +143,11 @@ environment variables."
         :n "O" #'nosetests-pdb-one
         :n "V" #'nosetests-pdb-module))
 
+
+;;
+;; Evil integration
+;;
+
+(when (featurep! :feature evil +everywhere)
+  (add-hook! '(anaconda-mode-hook nose-mode-hook)
+    #'evil-normalize-keymaps))

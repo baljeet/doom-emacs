@@ -11,31 +11,32 @@
 ;; Plugins
 ;;
 
-(def-package! password-store
-  :defer t
-  :config
-  (setq password-store-password-length 12))
+;; `password-store'
+(setq password-store-password-length 12)
+
+;; Fix hard-coded password-store location; respect PASSWORD_STORE_DIR envvar
+(defun +password-store*read-entry (entry)
+  "Return a string with the file content of ENTRY."
+  (with-temp-buffer
+    (insert-file-contents
+     (expand-file-name (format "%s.gpg" entry) (password-store-dir)))
+    (buffer-substring-no-properties (point-min) (point-max))))
+(advice-add #'auth-source-pass--read-entry :override #'+password-store*read-entry)
 
 
-(def-package! pass
-  :commands pass
-  :config
-  (set! :evil-state 'pass-mode 'emacs)
-  (set! :popup "^\\*Password-Store" '((side . left) (size . 0.25)) '((quit)))
-  (map! :map pass-mode-map
-        "j"   #'pass-next-entry
-        "k"   #'pass-prev-entry
-        "d"   #'pass-kill
-        "C-j" #'pass-next-directory
-        "C-k" #'pass-next-directory))
-
-
-(def-package! helm-pass
-  :when (featurep! :completion helm)
-  :commands helm-pass)
+;; `pass'
+(after! pass
+  (set-env! "PASSWORD_STORE_DIR")
+  (set-evil-initial-state! 'pass-mode 'emacs)
+  (set-popup-rule! "^\\*Password-Store" :side 'left :size 0.25 :quit nil)
+  (define-key! pass-mode-map
+    "j"    #'pass-next-entry
+    "k"    #'pass-prev-entry
+    "d"    #'pass-kill
+    "\C-j" #'pass-next-directory
+    "\C-k" #'pass-prev-directory))
 
 
 ;; Is built into Emacs 26+
-(def-package! auth-source-pass
-  :when (featurep! +auth)
-  :config (auth-source-pass-enable))
+(when (and EMACS26+ (featurep! +auth))
+  (auth-source-pass-enable))

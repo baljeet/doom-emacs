@@ -1,12 +1,12 @@
 ;;; lang/plantuml/config.el -*- lexical-binding: t; -*-
 
 (def-package! plantuml-mode
-  :mode "\\.p\\(lant\\)?uml$"
+  :defer t
   :init
   (setq plantuml-jar-path (concat doom-etc-dir "plantuml.jar")
         org-plantuml-jar-path plantuml-jar-path)
   :config
-  (set! :popup "^\\*PLANTUML" '((size . 0.4)) '((select) (transient . 0))))
+  (set-popup-rule! "^\\*PLANTUML" :size 0.4 :select nil :ttl 0))
 
 
 (def-package! flycheck-plantuml

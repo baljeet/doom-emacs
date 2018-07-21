@@ -4,7 +4,6 @@
 (package! evil)
 (package! evil-args)
 (package! evil-commentary)
-(package! evil-collection)
 (package! evil-easymotion)
 (package! evil-embrace)
 (package! evil-escape)
@@ -19,3 +18,14 @@
 (package! evil-surround)
 (package! evil-vimish-fold)
 (package! evil-visualstar)
+(package! exato)
+
+
+;;
+(when (featurep! +everywhere)
+  ;; `evil-collection-neotree' uses the `neotree-make-executor' macro, but this
+  ;; requires neotree be available during byte-compilation (while installing).
+  (when (featurep! :ui neotree)
+    (depends-on! :ui neotree))
+
+  (package! evil-collection))

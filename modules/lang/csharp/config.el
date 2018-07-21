@@ -1,31 +1,25 @@
 ;;; lang/csharp/config.el -*- lexical-binding: t; -*-
 
-(def-package! csharp-mode :mode "\\.cs$")
-
-(def-package! shader-mode :mode "\\.shader$") ; unity shaders
+;; unity shaders
+(add-to-list 'auto-mode-alist '("\\.shader$" . shader-mode))
 
 
 (def-package! omnisharp
-  :after csharp-mode
+  :hook (csharp-mode . omnisharp-mode)
+  :commands omnisharp-install-server
   :preface
   (setq omnisharp-auto-complete-want-documentation nil
         omnisharp-cache-directory (concat doom-cache-dir "omnisharp"))
   :config
-  (let ((omnisharp-bin (or omnisharp-server-executable-path (omnisharp--server-installation-path t))))
-    (unless (file-exists-p omnisharp-bin)
-      (warn! "Omnisharp server isn't installed, completion won't work")))
-
-  (add-hook! csharp-mode #'(flycheck-mode omnisharp-mode))
-
   (defun +csharp|cleanup-omnisharp-server ()
     "Clean up the omnisharp server once you kill the last csharp-mode buffer."
     (unless (doom-buffers-in-mode 'csharp-mode (buffer-list))
       (omnisharp-stop-server)))
   (add-hook! csharp-mode (add-hook 'kill-buffer-hook #'omnisharp-stop-server nil t))
 
-  (set! :company-backend 'csharp-mode '(company-omnisharp))
+  (set-company-backend! 'csharp-mode '(company-omnisharp))
 
-  (set! :lookup 'csharp-mode
+  (set-lookup-handlers! 'csharp-mode
     :definition #'omnisharp-go-to-definition
     :references #'omnisharp-find-usages
     :documentation #'omnisharp-current-type-documentation)

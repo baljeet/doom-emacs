@@ -35,81 +35,36 @@ If any hook returns non-nil, all hooks after it are ignored.")
          ;; quit the minibuffer if open.
          (abort-recursive-edit))
         ;; Run all escape hooks. If any returns non-nil, then stop there.
-        ((run-hook-with-args-until-success 'doom-escape-hook))
+        ((cl-find-if #'funcall doom-escape-hook))
         ;; don't abort macros
         ((or defining-kbd-macro executing-kbd-macro) nil)
         ;; Back to the default
-        (t (keyboard-quit))))
+        ((keyboard-quit))))
 
 (global-set-key [remap keyboard-quit] #'doom/escape)
 
 
 ;;
 (def-package! which-key
-  :config
+  :defer 1
+  :after-call pre-command-hook
+  :init
   (setq which-key-sort-order #'which-key-prefix-then-key-order
         which-key-sort-uppercase-first nil
         which-key-add-column-padding 1
         which-key-max-display-columns nil
-        which-key-min-display-lines 5
+        which-key-min-display-lines 6
         which-key-side-window-slot -10)
+  :config
   ;; embolden local bindings
   (set-face-attribute 'which-key-local-map-description-face nil :weight 'bold)
   (which-key-setup-side-window-bottom)
-  (add-hook 'doom-init-hook #'which-key-mode))
+  (setq-hook! 'which-key-init-buffer-hook line-spacing 3)
+  (which-key-mode +1))
 
 
-(def-package! hydra
-  :init
-  ;; In case I later need to wrap defhydra in any special functionality.
-  (defalias 'def-hydra! 'defhydra)
-  (defalias 'def-hydra-radio! 'defhydradio)
-  :config
-  (setq lv-use-seperator t)
-
-  (def-hydra! doom@text-zoom (:hint t :color red)
-    "
-      Text zoom: _j_:zoom in, _k_:zoom out, _0_:reset
-"
-    ("j" text-scale-increase "in")
-    ("k" text-scale-decrease "out")
-    ("0" (text-scale-set 0) "reset"))
-
-  (def-hydra! doom@window-nav (:hint nil)
-    "
-          Split: _v_ert  _s_:horz
-         Delete: _c_lose  _o_nly
-  Switch Window: _h_:left  _j_:down  _k_:up  _l_:right
-        Buffers: _p_revious  _n_ext  _b_:select  _f_ind-file
-         Resize: _H_:splitter left  _J_:splitter down  _K_:splitter up  _L_:splitter right
-           Move: _a_:up  _z_:down  _i_menu
-"
-    ("z" scroll-up-line)
-    ("a" scroll-down-line)
-    ("i" idomenu)
-
-    ("h" windmove-left)
-    ("j" windmove-down)
-    ("k" windmove-up)
-    ("l" windmove-right)
-
-    ("p" previous-buffer)
-    ("n" next-buffer)
-    ("b" switch-to-buffer)
-    ("f" find-file)
-
-    ("s" split-window-below)
-    ("v" split-window-right)
-
-    ("c" delete-window)
-    ("o" delete-other-windows)
-
-    ("H" hydra-move-splitter-left)
-    ("J" hydra-move-splitter-down)
-    ("K" hydra-move-splitter-up)
-    ("L" hydra-move-splitter-right)
-
-    ("q" nil)))
+;; `hydra'
+(setq lv-use-seperator t)
 
 
 ;;
@@ -119,10 +74,11 @@ If any hook returns non-nil, all hooks after it are ignored.")
   KEYS should be a string in kbd format.
   DESC should be a string describing what KEY does.
   MODES should be a list of major mode symbols."
-  (if modes
-      (dolist (mode modes)
-        (which-key-add-major-mode-key-based-replacements mode key desc))
-    (which-key-add-key-based-replacements key desc)))
+  (after! which-key
+    (if modes
+        (dolist (mode modes)
+          (which-key-add-major-mode-key-based-replacements mode key desc))
+      (which-key-add-key-based-replacements key desc))))
 
 
 (defun doom--keyword-to-states (keyword)
@@ -251,7 +207,13 @@ Example
                     forms)))
           (:prefix
             (let ((def (pop rest)))
-              (setq doom--prefix `(vconcat ,doom--prefix (kbd ,def)))
+              (setq doom--prefix
+                    `(vconcat ,doom--prefix
+                              ,(if (or (stringp def)
+                                       (and (symbolp def)
+                                            (stringp (symbol-value def))))
+                                   `(kbd ,def)
+                                 def)))
               (when desc
                 (push `(doom--keybind-register ,(key-description (eval doom--prefix))
                                                ,desc ',modes)
@@ -289,25 +251,23 @@ Example
                            forms)
                      (throw 'skip 'local))
                     ((and doom--keymaps states)
-                     (unless (featurep 'evil)
-                       (throw 'skip 'evil))
                      (dolist (keymap doom--keymaps)
                        (when (memq 'global states)
                          (push `(define-key ,keymap ,key ,def) forms))
-                       (when-let* ((states (delq 'global states)))
-                         (push `(,(if doom--defer #'evil-define-key #'evil-define-key*)
-                                 ',states ,keymap ,key ,def)
-                               forms))))
+                       (when (featurep 'evil)
+                         (when-let* ((states (delq 'global states)))
+                           (push `(,(if doom--defer #'evil-define-key #'evil-define-key*)
+                                   ',states ,keymap ,key ,def)
+                                 forms)))))
                     (states
-                     (unless (featurep 'evil)
-                       (throw 'skip 'evil))
                      (dolist (state states)
-                       (push (if (eq state 'global)
-                                 `(global-set-key ,key ,def)
-                               (if doom--local
-                                   `(evil-local-set-key ',state ,key ,def)
-                                 `(evil-define-key* ',state 'global ,key ,def)))
-                             forms)))
+                       (if (eq state 'global)
+                           (push `(global-set-key ,key ,def) forms)
+                         (when (featurep 'evil)
+                           (push (if doom--local
+                                     `(evil-local-set-key ',state ,key ,def)
+                                   `(evil-define-key* ',state 'global ,key ,def))
+                                 forms)))))
                     (doom--keymaps
                      (dolist (keymap doom--keymaps)
                        (push `(define-key ,keymap ,key ,def) forms)))

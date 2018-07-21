@@ -1,9 +1,5 @@
 ;;; core-os.el -*- lexical-binding: t; -*-
 
-(defconst IS-MAC     (eq system-type 'darwin))
-(defconst IS-LINUX   (eq system-type 'gnu/linux))
-(defconst IS-WINDOWS (memq system-type '(cygwin windows-nt ms-dos)))
-
 ;; clipboard
 (setq x-select-request-type '(UTF8_STRING COMPOUND_TEXT TEXT STRING)
       ;; Use a shared clipboard
@@ -15,6 +11,15 @@
 ;; Most of this code grokked from:
 ;; http://stackoverflow.com/questions/15873346/elisp-rename-macro
 (advice-add #'evil-visual-update-x-selection :override #'ignore)
+
+(defmacro set-env! (&rest _vars)
+  "Inject VARS from your shell environment into Emacs.")
+
+;; FIXME obsolete :env
+(def-setting! :env (&rest vars)
+  :obsolete set-env!
+  (when (featurep 'exec-path-from-shell)
+    `(exec-path-from-shell-copy-envs ,@vars)))
 
 (cond (IS-MAC
        (setq mac-command-modifier 'meta
@@ -30,20 +35,23 @@
              ;; Don't open files from the workspace in a new frame
              ns-pop-up-frames nil)
 
-       (cond ((display-graphic-p)
-              ;; A known problem with GUI Emacs on MacOS: it runs in an isolated
-              ;; environment, so envvars will be wrong. That includes the PATH
-              ;; Emacs picks up. `exec-path-from-shell' fixes this.
-              (when (require 'exec-path-from-shell nil t)
-                (def-setting! :env (&rest vars)
-                  "Inject VARS from your shell environment into Emacs."
-                  `(exec-path-from-shell-copy-envs (list ,@vars)))
-                (setq exec-path-from-shell-check-startup-files nil
-                      exec-path-from-shell-arguments (delete "-i" exec-path-from-shell-arguments))
-                (defvaralias 'exec-path-from-shell-debug 'doom-debug-mode)
-                (exec-path-from-shell-initialize)))
-             ((require 'osx-clipboard nil t)
-              (osx-clipboard-mode +1))))
+       (when (or (daemonp) (display-graphic-p))
+         ;; A known problem with GUI Emacs on MacOS (or daemons started via
+         ;; launchctl or brew services): it runs in an isolated
+         ;; environment, so envvars will be wrong. That includes the PATH
+         ;; Emacs picks up. `exec-path-from-shell' fixes this.
+         (when (require 'exec-path-from-shell nil t)
+           (defun set-env! (&rest vars)
+             "Inject VARS from your shell environment into Emacs."
+             (exec-path-from-shell-copy-envs vars))
+           (setq exec-path-from-shell-check-startup-files nil
+                 exec-path-from-shell-arguments (delete "-i" exec-path-from-shell-arguments)
+                 exec-path-from-shell-debug doom-debug-mode)
+           (exec-path-from-shell-initialize)))
+
+       ;; Fix the clipboard in terminal or daemon Emacs (non-GUI)
+       (when (or (daemonp) (not (display-graphic-p)))
+         (add-hook 'doom-post-init-hook #'osx-clipboard-mode)))
 
       (IS-LINUX
        (setq x-gtk-use-system-tooltips nil    ; native tooltips are ugly!

@@ -1,7 +1,9 @@
 ;; -*- no-byte-compile: t; -*-
 ;;; tools/magit/packages.el
 
-(package! magit)
-(package! magithub)
-(when (featurep! :feature evil)
-  (package! evil-magit))
+(when (package! magit)
+  (package! magit-gitflow)
+  (package! magithub)
+  (package! magit-todos)
+  (when (featurep! :feature evil +everywhere)
+    (package! evil-magit)))

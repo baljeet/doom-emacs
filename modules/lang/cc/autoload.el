@@ -1,12 +1,20 @@
 ;;; lang/cc/autoload.el -*- lexical-binding: t; -*-
 
 ;;;###autoload
+(add-to-list 'auto-mode-alist '("\\.cl\\'" . opencl-mode))
+
+
+;;
+;; Library
+;;
+
+;;;###autoload
 (defun +cc/reload-compile-db ()
   "Reload the current project's JSON compilation database."
   (interactive)
   (unless (memq major-mode '(c-mode c++-mode objc-mode))
     (user-error "Not a C/C++/ObjC buffer"))
-  (unless (doom-project-has! "compile_commands.json")
+  (unless (project-file-exists-p! "compile_commands.json")
     (user-error "No compile_commands.json file"))
   ;; first rtag
   (when (and (featurep 'rtags)
@@ -88,12 +96,6 @@ compilation dbs."
                (cl-loop for path in +cc-default-include-paths
                         nconc (list "-I" path)))
        (doom-project-root)))))
-
-;;;###autoload
-(defun +cc|init-rtags ()
-  "Start an rtags server in c-mode and c++-mode buffers."
-  (when (memq major-mode '(c-mode c++-mode))
-    (rtags-start-process-unless-running)))
 
 ;;;###autoload
 (defun +cc|cleanup-rtags ()

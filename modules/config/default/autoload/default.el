@@ -29,15 +29,17 @@
 
 ;;;###autoload
 (defun +default/browse-notes ()
-  (interactive) (doom-project-browse +org-dir))
+  (interactive) (doom-project-browse org-directory))
 ;;;###autoload
 (defun +default/find-in-notes ()
-  (interactive) (doom-project-find-file +org-dir))
+  (interactive) (doom-project-find-file org-directory))
 
 ;;;###autoload
 (defun +default/browse-snippets ()
-  (interactive) (doom-project-browse emacs-snippets-dir))
-;; NOTE No need for a browse-snippets variant, use `yas-visit-snippet-file'
+  (interactive) (doom-project-browse +snippets-dir))
+;;;###autoload
+(defun +default/find-in-snippets ()
+  (interactive) (doom-project-find-file +snippets-dir))
 
 ;;;###autoload
 (defun +default/find-in-config ()
@@ -66,3 +68,15 @@ If ARG (universal argument), runs `compile' from the current directory."
      (if arg
          #'projectile-compile-project
        #'compile))))
+
+;;;###autoload
+(defun +default/man-or-woman ()
+  "Invoke `man' if man is installed, otherwise use `woman'."
+  (interactive)
+  (call-interactively
+   (if (executable-find "man")
+       #'man
+     #'woman)))
+
+;;;###autoload
+(defalias '+default/newline #'newline)

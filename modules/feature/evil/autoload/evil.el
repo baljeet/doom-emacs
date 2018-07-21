@@ -1,6 +1,27 @@
 ;; feature/evil/autoload/evil.el -*- lexical-binding: t; -*-
 ;;;###if (featurep! :feature evil)
 
+;;;###autodef
+(defun set-evil-initial-state! (modes state)
+  "Set the initialize STATE of MODES using `evil-set-initial-state'."
+  (declare (indent defun))
+  (after! evil
+    (if (listp modes)
+        (dolist (mode (doom-enlist modes))
+          (evil-set-initial-state mode state))
+      (evil-set-initial-state modes state))))
+
+;; FIXME obsolete :evil-state
+;;;###autoload
+(def-setting! :evil-state (modes state)
+  :obsolete set-evil-initial-state!
+  `(set-evil-initial-state! ,modes ,state))
+
+
+;;
+;; Commands
+;;
+
 ;;;###autoload
 (defun +evil/visual-indent ()
   "vnoremap < <gv"
@@ -19,13 +40,21 @@
 
 ;;;###autoload
 (defun +evil/reselect-paste ()
-  "Go back into visual mode and reselect the last pasted region."
+  "Return to visual mode and reselect the last pasted region."
   (interactive)
   (cl-destructuring-bind (_ _ _ beg end &optional _)
       evil-last-paste
     (evil-visual-make-selection
      (save-excursion (goto-char beg) (point-marker))
      end)))
+
+;;;###autoload
+(defun +evil/paste-preserve-register ()
+  "Call `evil-paste-after' without overwriting the clipboard (by writing to the
+0 register instead). This allows you to paste the same text again afterwards."
+  (interactive)
+  (let ((evil-this-register ?0))
+    (call-interactively #'evil-paste-after)))
 
 (defun +evil--window-swap (direction)
   "Move current window to the next window in DIRECTION. If there are no windows
@@ -71,6 +100,11 @@ evil-window-move-* (e.g. `evil-window-move-far-left')"
 (defun +evil/window-move-up () "See `+evil--window-swap'"    (interactive) (+evil--window-swap 'up))
 ;;;###autoload
 (defun +evil/window-move-down () "See `+evil--window-swap'"  (interactive) (+evil--window-swap 'down))
+
+
+;;
+;; Evil commands/operators
+;;
 
 ;;;###autoload (autoload '+evil:apply-macro "feature/evil/autoload/evil" nil t)
 (evil-define-operator +evil:apply-macro (beg end)
@@ -223,15 +257,6 @@ the first match on each line)."
   (save-excursion (apply orig-fn args)))
 
 ;;;###autoload
-(defun +evil*restore-initial-state-on-windmove (orig-fn &rest args)
-  "Revert buffer to its initial state when switching to another window. This
-prevents states from bleeding into other modes across windows."
-  (let ((initial-state (evil-initial-state major-mode 'normal)))
-    (unless (eq evil-state initial-state)
-      (evil-change-state initial-state)))
-  (apply orig-fn args))
-
-;;;###autoload
 (defun +evil*resolve-vim-path (file-name)
   "Take a path and resolve any vim-like filename modifiers in it. This adds
 support for most vim file modifiers, as well as:
@@ -339,3 +364,24 @@ more information on modifiers."
   (when (and (not count) evil-auto-balance-windows)
     (balance-windows (window-parent)))
   (if file (evil-edit file)))
+
+;;;###autoload
+(defun +evil*escape (&rest _)
+  "Call `doom/escape' if `evil-force-normal-state' is called interactively."
+  (when (called-interactively-p 'any)
+    (call-interactively #'doom/escape)))
+
+;;;###autoload
+(defun +evil/easymotion ()
+  "Invoke and lazy-load `evil-easymotion' without compromising which-key
+integration."
+  (interactive)
+  (let ((prefix (this-command-keys)))
+    (evil-define-key* 'motion 'global prefix nil)
+    (evilem-default-keybindings prefix)
+    (which-key-reload-key-sequence
+     (vconcat (when evil-this-operator
+                (where-is-internal evil-this-operator
+                                   evil-normal-state-map
+                                   t))
+              prefix))))

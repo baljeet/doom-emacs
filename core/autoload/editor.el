@@ -127,10 +127,11 @@ possible, or just one char if that's not possible."
          open-len close-len)
     (cond ;; When in strings (sp acts weird with quotes; this is the fix)
           ;; Also, skip closing delimiters
-          ((and (string= op cl)
-                (and (string= (char-to-string (char-before)) op)
+          ((and op cl
+                (string= op cl)
+                (and (string= (char-to-string (or (char-before) 0)) op)
                      (setq open-len (length op)))
-                (and (string= (char-to-string (char-after)) cl)
+                (and (string= (char-to-string (or (char-after) 0)) cl)
                      (setq close-len (length cl))))
            (delete-char (- open-len))
            (delete-char close-len))
@@ -185,8 +186,7 @@ possible, or just one char if that's not possible."
            (save-excursion
              (insert-char ?\s (- ocol (current-column)) nil))))
         ;;
-        ((and (= n 1)
-              (not (minibufferp)))
+        ((and (= n 1) (bound-and-true-p smartparens-mode))
          (cond ((and (memq (char-before) (list ?\  ?\t))
                      (save-excursion
                        (and (> (- (skip-chars-backward " \t" (line-beginning-position))) 0)
@@ -212,20 +212,24 @@ possible, or just one char if that's not possible."
                         ((run-hook-with-args-until-success 'doom-delete-backward-functions))
                         ((doom/backward-delete-whitespace-to-column)))))))
         ;; Otherwise, do simple deletion.
-        (t (delete-char (- n) killflag))))
+        ((delete-char (- n) killflag))))
 
 ;;;###autoload
-(defun doom/retab (&optional beg end)
+(defun doom/retab (arg &optional beg end)
   "Converts tabs-to-spaces or spaces-to-tabs within BEG and END (defaults to
 buffer start and end, to make indentation consistent. Which it does depends on
-the value of `indent-tab-mode'."
-  (interactive "r")
+the value of `indent-tab-mode'.
+
+If ARG (universal argument) is non-nil, retab the current buffer using the
+opposite indentation style."
+  (interactive "Pr")
   (unless (and beg end)
     (setq beg (point-min)
           end (point-max)))
-  (if indent-tabs-mode
-      (tabify beg end)
-    (untabify beg end)))
+  (let ((indent-tabs-mode (if arg (not indent-tabs-mode) indent-tabs-mode)))
+    (if indent-tabs-mode
+        (tabify beg end)
+      (untabify beg end))))
 
 (defvar-local doom--buffer-narrowed-origin nil)
 ;;;###autoload

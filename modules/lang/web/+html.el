@@ -2,19 +2,39 @@
 
 (def-package! web-mode
   :mode "\\.p?html?$"
-  :mode "\\.\\(tpl\\|blade\\)\\(\\.php\\)?$"
+  :mode "\\.\\(?:tpl\\|blade\\)\\(\\.php\\)?$"
   :mode "\\.erb$"
   :mode "\\.jsp$"
   :mode "\\.as[cp]x$"
+  :mode "\\.hbs$"
   :mode "\\.mustache$"
   :mode "\\.tsx$"
   :mode "\\.vue$"
   :mode "\\.twig$"
+  :mode "\\.jinja$"
   :mode "wp-content/themes/.+/.+\\.php$"
   :mode "templates/.+\\.php$"
   :config
-  (set! :company-backend 'web-mode '(company-web-html company-yasnippet))
-  (setq web-mode-enable-html-entities-fontification t)
+  (setq web-mode-enable-html-entities-fontification t
+        web-mode-auto-close-style 2)
+
+  (after! smartparens
+    ;; let smartparens handle these
+    (setq web-mode-enable-auto-quoting nil
+          web-mode-enable-auto-pairing t)
+    ;; Remove web-mode auto pairs that end with >, because smartparens autopairs
+    ;; them, causing duplicates. Also remove truncated autopairs, like <?p and
+    ;; hp ?>.
+    (dolist (alist web-mode-engines-auto-pairs)
+      (setcdr alist (delq nil
+                          (mapcar (lambda (pair)
+                                    (unless (string-match-p "^[a-z-]" (cdr pair))
+                                      (cons (car pair)
+                                            (if (equal (substring (cdr pair) -1) ">")
+                                                (substring (cdr pair) 0 -1)
+                                              (cdr pair)))))
+                                  (cdr alist)))))
+    (setf (alist-get nil web-mode-engines-auto-pairs) nil))
 
   (map! :map web-mode-map
         (:localleader
@@ -80,7 +100,6 @@
 
         "M-/" #'web-mode-comment-or-uncomment
         :i  "SPC" #'self-insert-command
-        :n  "M-r" #'doom/web-refresh-browser
         :n  "za"  #'web-mode-fold-or-unfold
         :nv "]a"  #'web-mode-attribute-next
         :nv "[a"  #'web-mode-attribute-previous
@@ -90,16 +109,10 @@
         :nv "[T"  #'web-mode-element-parent))
 
 
-(def-package! company-web
-  :when (featurep! :completion company)
-  :after web-mode)
-
-
-(def-package! haml-mode :mode "\\.haml$")
-
-
-(def-package! pug-mode
-  :mode "\\.jade$"
-  :mode "\\.pug$"
-  :config
-  (set! :company-backend 'pug-mode '(company-yasnippet)))
+;;
+(after! pug-mode
+  (set-company-backend! 'pug-mode 'company-web-jade))
+(after! web-mode
+  (set-company-backend! 'web-mode 'company-web-html))
+(after! slim-mode
+  (set-company-backend! 'slim-mode 'company-web-slim))

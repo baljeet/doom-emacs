@@ -2,12 +2,12 @@
 ;;; core/packages.el
 
 ;; core-os.el
-(package! exec-path-from-shell :ignore (not IS-MAC))
-(package! osx-clipboard        :ignore (not IS-MAC))
+(when IS-MAC
+  (package! exec-path-from-shell)
+  (package! osx-clipboard))
 
 ;; core-ui.el
 (package! all-the-icons)
-(package! fringe-helper)
 (package! hide-mode-line)
 (package! highlight-indentation)
 (package! highlight-numbers)
@@ -17,20 +17,17 @@
   (package! nlinum-relative))
 (package! rainbow-delimiters)
 (package! visual-fill-column)
-
-;; core-popups.el
-(package! shackle)
+(package! restart-emacs)
 
 ;; core-editor.el
 (package! ace-link)
 (package! ace-window)
 (package! avy)
 (package! command-log-mode)
-(package! editorconfig)
+(package! dtrt-indent)
 (package! expand-region)
 (package! helpful)
 (package! pcre2el)
-(package! smart-forward)
 (package! smartparens)
 (package! undo-tree)
 
@@ -40,3 +37,9 @@
 ;; core-keybinds.el
 (package! which-key)
 (package! hydra)
+
+;; autoload/debug.el
+(package! esup)
+
+;; autoload/test.el
+(package! buttercup)

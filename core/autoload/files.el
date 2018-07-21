@@ -7,7 +7,9 @@
    (list (read-file-name "Open as root: ")))
   (find-file (if (file-writable-p file)
                  file
-               (concat "/sudo:root@localhost:" file))))
+               (if (file-remote-p file)
+                   (concat "/" (file-remote-p file 'method) ":" (file-remote-p file 'user) "@" (file-remote-p file 'host)  "|sudo:root@" (file-remote-p file 'host) ":" (file-remote-p file 'localname))
+                 (concat "/sudo:root@localhost:" file)))))
 
 ;;;###autoload
 (defun doom/sudo-this-file ()
@@ -23,12 +25,19 @@
     (when new-path
       (recentf-add-file new-path))
     (recentf-remove-if-non-kept old-path))
-  (when (and projectile-mode
+  (when (and (bound-and-true-p projectile-mode)
              (projectile-project-p)
              (projectile-file-cached-p old-path (projectile-project-root)))
     (projectile-purge-file-from-cache old-path))
   (when (bound-and-true-p save-place-mode)
     (save-place-forget-unreadable-files)))
+
+(defun doom--update-file (path)
+  (when (featurep 'vc)
+    (vc-file-clearprops path)
+    (vc-resynch-buffer path nil t))
+  (when (featurep 'magit)
+    (magit-refresh)))
 
 (defun doom--copy-file (old-path new-path &optional force-p)
   (let* ((new-path (expand-file-name new-path))
@@ -47,16 +56,16 @@
       (make-directory new-path-dir t))
     (when (buffer-modified-p)
       (save-buffer))
-    (cond ((equal (file-truename old-path)
-                  (file-truename new-path))
+    (cond ((file-equal-p old-path new-path)
            (throw 'status 'overwrite-self))
           ((and (file-exists-p new-path)
                 (not force-p)
                 (not (y-or-n-p (format "File already exists at %s, overwrite?" short-new-name))))
            (throw 'status 'aborted))
-          (t
+          ((file-exists-p old-path)
            (copy-file old-path new-path t)
-           short-new-name))))
+           short-new-name)
+          (short-new-name))))
 
 ;;;###autoload
 (defun doom/delete-this-file (&optional path force-p)
@@ -72,8 +81,7 @@ kills the buffer. If FORCE-P, force the deletion (don't ask for confirmation)."
           ((not (or force-p (y-or-n-p (format "Really delete %s?" fbase))))
            (message "Aborted")
            nil)
-          (t
-           (unwind-protect
+          ((unwind-protect
                (progn (delete-file path) t)
              (let ((short-path (file-relative-name path (doom-project-root))))
                (if (file-exists-p path)
@@ -82,6 +90,7 @@ kills the buffer. If FORCE-P, force the deletion (don't ask for confirmation)."
                  ;; to real buffers (`doom-real-buffer-p')
                  (doom/kill-this-buffer-in-all-windows buf t)
                  (doom--forget-file path)
+                 (doom--update-file path)
                  (message "Successfully deleted %s" short-path))))))))
 
 ;;;###autoload
@@ -91,6 +100,7 @@ file if it exists, without confirmation."
   (interactive "F")
   (pcase (catch 'status
            (when-let* ((dest (doom--copy-file (buffer-file-name) new-path force-p)))
+             (doom--update-file new-path)
              (message "File successfully copied to %s" dest)))
     (`overwrite-self (error "Cannot overwrite self"))
     (`aborted (message "Aborted"))
@@ -105,10 +115,12 @@ file if it exists, without confirmation."
            (let ((old-path (buffer-file-name))
                  (new-path (expand-file-name new-path)))
              (when-let* ((dest (doom--copy-file old-path new-path force-p)))
-               (delete-file old-path)
+               (when (file-exists-p old-path)
+                 (delete-file old-path))
                (kill-this-buffer)
                (find-file new-path)
                (doom--forget-file old-path new-path)
+               (doom--update-file new-path)
                (message "File successfully moved to %s" dest))))
     (`overwrite-self (error "Cannot overwrite self"))
     (`aborted (message "Aborted"))

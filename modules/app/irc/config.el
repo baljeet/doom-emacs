@@ -36,11 +36,6 @@ See `circe-notifications-watch-strings'.")
 Useful for ZNC users who want to avoid the deluge of notifications during buffer
 playback.")
 
-(def-setting! :irc (server letvars)
-  "Registers an irc server for circe."
-  `(after! circe
-     (push (cons ,server ,letvars) circe-network-options)))
-
 (defvar +irc--defer-timer nil)
 
 (defsubst +irc--pad (left right)
@@ -103,7 +98,7 @@ playback.")
   (advice-add 'circe--irc-conn-disconnected :after #'+irc*circe-disconnect-hook)
 
   ;; Let `+irc/quit' and `circe' handle buffer cleanup
-  (map! :map circe-mode-map [remap kill-buffer] #'bury-buffer)
+  (define-key circe-mode-map [remap kill-buffer] #'bury-buffer)
 
   (defun +irc*circe-truncate-nicks ()
     "Truncate long nicknames in chat output non-destructively."
@@ -125,7 +120,23 @@ playback.")
 
   (after! solaire-mode
     ;; distinguish chat/channel buffers from server buffers.
-    (add-hook 'circe-chat-mode-hook #'solaire-mode)))
+    (add-hook 'circe-chat-mode-hook #'solaire-mode))
+
+  (map!
+   (:localleader
+     (:map circe-mode-map
+       :desc "Next active buffer"     :n "a" #'tracking-next-buffer
+       :desc "Join channel"           :n "j" #'circe-command-JOIN
+       :desc "Send private message"   :n "m" #'+irc/send-message
+       :desc "Part current channel"   :n "p" #'circe-command-PART
+       :desc "Quit irc"               :n "Q" #'+irc/quit
+       :desc "Reconnect"              :n "R" #'circe-reconnect
+
+       (:when (featurep! :completion ivy)
+         :desc "Jump to channel"      :n "c" #'+irc/ivy-jump-to-channel))
+
+     (:map circe-channel-mode-map
+       :desc "Show names"           :n "n" #'circe-command-NAMES))))
 
 
 (def-package! circe-color-nicks
@@ -163,10 +174,11 @@ playback.")
 (def-package! lui
   :commands lui-mode
   :config
-  (map! :map lui-mode-map "C-u" #'lui-kill-to-beginning-of-line)
+  (define-key lui-mode-map "\C-u" #'lui-kill-to-beginning-of-line)
+  (setq lui-fill-type nil)
+
   (when (featurep! :feature spellcheck)
-    (setq lui-flyspell-p t
-          lui-fill-type nil))
+    (setq lui-flyspell-p t))
 
   (after! evil
     (defun +irc|evil-insert ()

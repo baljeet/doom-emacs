@@ -4,10 +4,8 @@
 ;; errors. If that happens, try `+gist/kill-cache'. You may have to restart
 ;; Emacs.
 
-(def-package! gist
-  :commands (gist-list gist-region-or-buffer-private gist-region-or-buffer)
-  :config
-  (set! :evil-state 'gist-list-mode 'normal)
+(after! gist
+  (set-evil-initial-state! 'gist-list-mode 'normal)
 
   (defun +gist*list-render (orig-fn &rest args)
     (funcall orig-fn (car args) t)

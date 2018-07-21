@@ -1,4 +1,5 @@
 ;;; config/default/+evil-commands.el -*- lexical-binding: t; -*-
+;;;###if (featurep! :feature evil)
 
 (defalias 'ex! 'evil-ex-define-cmd)
 
@@ -11,6 +12,7 @@
   (doom/open-scratch-buffer bang))
 
 (evil-define-command doom:pwd (bang)
+  "Display the current working directory. If BANG, copy it to your clipboard."
   (interactive "<!>")
   (if (not bang)
       (pwd)
@@ -18,10 +20,17 @@
     (message "Copied to clipboard")))
 
 (evil-define-command doom:make (command &optional from-pwd)
+  "Run the current project Makefile's COMMAND. If FROM-PWD (bang), run the make
+command from the current directory instead of the project root."
   (interactive "<sh><!>")
   (let ((default-directory (if from-pwd default-directory (doom-project-root t)))
         (command (and command (evil-ex-replace-special-filenames command))))
     (compile command)))
+
+(evil-define-command doom:reverse-lines (beg end)
+  "Reverse lines between BEG and END."
+  (interactive "<r>")
+  (reverse-region beg end))
 
 
 ;;
@@ -43,6 +52,7 @@
 (ex! "iedit"        #'evil-multiedit-ex-match)
 (ex! "na[rrow]"     #'+evil:narrow-buffer)
 (ex! "retab"        #'+evil:retab)
+(ex! "rev[erse]"    #'doom:reverse-lines)
 ;; External resources
 ;; TODO (ex! "db"          #'doom:db)
 ;; TODO (ex! "dbu[se]"     #'doom:db-select)
@@ -56,12 +66,12 @@
 (ex! "sh[ell]"     #'+eshell:run)
 (ex! "t[mux]"      #'+tmux:run)              ; send to tmux
 (ex! "tcd"         #'+tmux:cd-here)          ; cd to default-directory in tmux
-(ex! "x"           #'doom:open-scratch-buffer)
+(ex! "pad"         #'doom:open-scratch-buffer)
 ;; GIT
 (ex! "gist"        #'+gist:send)  ; send current buffer/region to gist
 (ex! "gistl"       #'+gist:list)  ; list gists by user
-(ex! "gbrowse"     #'+vcs/git-browse)        ; show file in github/gitlab
-(ex! "gissues"     #'+vcs/git-browse-issues) ; show github issues
+(ex! "gbrowse"     #'+vc/git-browse)        ; show file in github/gitlab
+(ex! "gissues"     #'+vc/git-browse-issues) ; show github issues
 (ex! "git"         #'magit-status)           ; open magit status window
 (ex! "gstage"      #'magit-stage)
 (ex! "gunstage"    #'magit-unstage)
@@ -93,11 +103,16 @@
        (ex! "todo"     #'+ivy:todo))
       ((featurep! :completion helm)
        (ex! "ag"       #'+helm:ag)
-       (ex! "agc[wd]"  #'+helm:ag-cwd)
+       (ex! "agc[wd]"  #'+helm:ag-from-cwd)
        (ex! "rg"       #'+helm:rg)
-       (ex! "rgc[wd]"  #'+helm:rg-cwd)
+       (ex! "rgc[wd]"  #'+helm:rg-from-cwd)
+       (ex! "pt"       #'+helm:pt)
+       (ex! "ptc[wd]"  #'+helm:pt-from-cwd)
+       (ex! "grep"      #'+helm:grep)
+       (ex! "grepc[wd]" #'+helm:grep-from-cwd)
        (ex! "sw[oop]"  #'+helm:swoop)
-       (ex! "todo"     #'+helm:todo)))
+       ;; (ex! "todo"     #'+helm:todo) TODO implement `+helm:todo'
+       ))
 ;; Project tools
 (ex! "mak[e]"      #'doom:make)
 (ex! "debug"       #'+debug/run)
@@ -121,5 +136,5 @@
 (ex! "tabs"        #'+workspace/display)
 (ex! "tabsave"     #'+workspace:save)
 ;; Org-mode
-(ex! "cap"         #'+org-capture/dwim)
+(ex! "cap"         #'org-capture)
 

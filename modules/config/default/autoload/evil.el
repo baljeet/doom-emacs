@@ -5,14 +5,14 @@
 (evil-define-motion +default:multi-next-line (count)
   "Move down 6 lines."
   :type line
-  (let ((line-move-visual (or visual-line-mode (derived-mode-p 'text-mode))))
+  (let ((line-move-visual (or visual-line-mode (derived-mode-p 'text-mode 'magit-mode))))
     (evil-line-move (* 6 (or count 1)))))
 
 ;;;###autoload (autoload '+default:multi-previous-line "config/default/autoload/evil" nil t)
 (evil-define-motion +default:multi-previous-line (count)
   "Move up 6 lines."
   :type line
-  (let ((line-move-visual (or visual-line-mode (derived-mode-p 'text-mode))))
+  (let ((line-move-visual (or visual-line-mode (derived-mode-p 'text-mode 'magit-mode))))
     (evil-line-move (- (* 6 (or count 1))))))
 
 ;;;###autoload (autoload '+default:cd "config/default/autoload/evil" nil t)
@@ -35,28 +35,3 @@
 buffers."
   (interactive "<a>")
   (doom/kill-matching-buffers pattern bang))
-
-;;;###autoload
-(defun +default/easymotion ()
-  "TODO"
-  (interactive)
-  (let ((prefix (this-command-keys)))
-    (map! :m prefix nil)
-    (evilem-default-keybindings prefix)
-    (let ((map evilem-map))
-      (define-key map "n" (evilem-create #'evil-ex-search-next))
-      (define-key map "N" (evilem-create #'evil-ex-search-previous))
-      (define-key map "s"
-        (evilem-create #'evil-snipe-repeat
-                       :pre-hook (save-excursion (call-interactively #'evil-snipe-s))
-                       :bind ((evil-snipe-scope 'buffer)
-                              (evil-snipe-enable-highlight)
-                              (evil-snipe-enable-incremental-highlight))))
-      (define-key map "S"
-        (evilem-create #'evil-snipe-repeat-reverse
-                       :pre-hook (save-excursion (call-interactively #'evil-snipe-s))
-                       :bind ((evil-snipe-scope 'buffer)
-                              (evil-snipe-enable-highlight)
-                              (evil-snipe-enable-incremental-highlight))))
-      (set-transient-map map)
-      (which-key-reload-key-sequence prefix))))

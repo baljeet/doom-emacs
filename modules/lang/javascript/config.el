@@ -1,12 +1,31 @@
 ;;; lang/javascript/config.el -*- lexical-binding: t; -*-
 
+(after! (:any js2-mode web-mode)
+  (set-pretty-symbols! '(js2-mode web-mode)
+    ;; Functional
+    :def "function"
+    :lambda "() =>"
+    :composition "compose"
+    ;; Types
+    :null "null"
+    :true "true" :false "false"
+    ;; Flow
+    :not "!"
+    :and "&&" :or "||"
+    :for "for"
+    :return "return"
+    ;; Other
+    :yield "import"))
+
+
 ;;
 ;; Major modes
 ;;
 
 (def-package! js2-mode
-  :mode "\\.js$"
+  :mode "\\.js\\'"
   :interpreter "node"
+  :commands js2-line-break
   :config
   (setq js2-skip-preprocessor-directives t
         js2-highlight-external-variables nil
@@ -19,53 +38,72 @@
         js2-strict-trailing-comma-warning nil
         js2-strict-missing-semi-warning nil)
 
-  (add-hook! 'js2-mode-hook #'(flycheck-mode rainbow-delimiters-mode))
+  (add-hook 'js2-mode-hook #'rainbow-delimiters-mode)
+  ;; Indent switch-case another step
+  (setq-hook! 'js2-mode-hook js-switch-indent-offset js2-basic-offset)
 
-  (set! :electric 'js2-mode :chars '(?\} ?\) ?.))
-
-  ;; Conform switch-case indentation to js2 normal indent
-  (defvaralias 'js-switch-indent-offset 'js2-basic-offset)
-
-  (sp-with-modes '(js2-mode rjsx-mode)
-    (sp-local-pair "/*" "*/" :post-handlers '(("| " "SPC"))))
+  (set-electric! 'js2-mode :chars '(?\} ?\) ?. ?:))
+  (set-repl-handler! 'js2-mode #'+javascript/repl)
 
   (map! :map js2-mode-map
         :localleader
-        :n  "S" #'+javascript/skewer-this-buffer))
-
-
-(def-package! typescript-mode
-  :mode "\\.ts$"
-  :config
-  (add-hook 'typescript-mode-hook #'rainbow-delimiters-mode)
-  (set! :electric 'typescript-mode :chars '(?\} ?\)) :words '("||" "&&")))
+        :n "S" #'+javascript/skewer-this-buffer))
 
 
 (def-package! rjsx-mode
-  :commands rjsx-mode
-  :mode "\\.jsx$"
   :mode "components/.+\\.js$"
   :init
   (defun +javascript-jsx-file-p ()
     "Detect React or preact imports early in the file."
     (and buffer-file-name
          (string= (file-name-extension buffer-file-name) "js")
-         (re-search-forward "\\(^\\s-*import +\\(?:pr\\|R\\)eact\\|\\( from \\|require(\\)[\"']p?react\\)"
+         (re-search-forward "\\(^\\s-*import +React\\|\\( from \\|require(\\)[\"']p?react\\)"
                             magic-mode-regexp-match-limit t)
          (progn (goto-char (match-beginning 1))
                 (not (sp-point-in-string-or-comment)))))
-
-  (push '(+javascript-jsx-file-p . rjsx-mode) magic-mode-alist)
+  (add-to-list 'magic-mode-alist '(+javascript-jsx-file-p . rjsx-mode))
   :config
-  (set! :electric 'rjsx-mode :chars '(?\} ?\) ?. ?>))
+  (set-electric! 'rjsx-mode :chars '(?\} ?\) ?. ?>))
   (add-hook! 'rjsx-mode-hook
     ;; jshint doesn't know how to deal with jsx
-    (push 'javascript-jshint flycheck-disabled-checkers)))
+    (push 'javascript-jshint flycheck-disabled-checkers))
+
+  ;; `rjsx-electric-gt' relies on js2's parser to tell it when the cursor is in
+  ;; a self-closing tag, so that it can insert a matching ending tag at point.
+  ;; However, the parser doesn't run immediately, so a fast typist can outrun
+  ;; it, causing tags to stay unclosed, so force it to parse.
+  (defun +javascript|reparse (n)
+    ;; if n != 1, rjsx-electric-gt calls rjsx-maybe-reparse itself
+    (if (= n 1) (rjsx-maybe-reparse)))
+  (advice-add #'rjsx-electric-gt :before #'+javascript|reparse))
 
 
-(def-package! coffee-mode
-  :mode "\\.coffee$"
-  :init (setq coffee-indent-like-python-mode t))
+(after! typescript-mode
+  (add-hook 'typescript-mode-hook #'rainbow-delimiters-mode)
+  (setq-hook! 'typescript-mode-hook
+    comment-line-break-function #'js2-line-break)
+  (set-electric! 'typescript-mode
+    :chars '(?\} ?\)) :words '("||" "&&"))
+  (set-pretty-symbols! 'typescript-mode
+    ;; Functional
+    :def "function"
+    :lambda "() =>"
+    :composition "compose"
+    ;; Types
+    :null "null"
+    :true "true" :false "false"
+    :int "number"
+    :str "string"
+    :bool "boolean"
+    ;; Flow
+    :not "!"
+    :and "&&" :or "||"
+    :for "for"
+    :return "return" :yield "import"))
+
+
+;; `coffee-mode'
+(setq coffee-indent-like-python-mode t)
 
 
 ;;
@@ -73,30 +111,37 @@
 ;;
 
 (def-package! tide
-  :hook (js2-mode . tide-setup)
-  :hook (typescript-mode . tide-setup)
+  :defer t
   :init
+  ;; Don't let hard errors stop the user from opening js files.
+  (defun +javascript|init-tide ()
+    "Enable `tide-mode' if node is available."
+    (if (executable-find "node")
+        (tide-setup)
+      (message "Couldn't find `node', aborting tide server")))
+  (add-hook! (js2-mode typescript-mode) #'+javascript|init-tide)
+
   (defun +javascript|init-tide-in-web-mode ()
+    "Enable `tide-mode' if in a *.tsx file."
     (when (string= (file-name-extension (or buffer-file-name "")) "tsx")
       (tide-setup)))
   (add-hook 'web-mode-hook #'+javascript|init-tide-in-web-mode)
   :config
+  (setq tide-completion-detailed t
+        tide-always-show-documentation t)
   ;; code completion
   (after! company
     ;; tide affects the global `company-backends', undo this so doom can handle
     ;; it buffer-locally
     (setq-default company-backends (delq 'company-tide (default-value 'company-backends))))
-  (set! :company-backend 'tide-mode 'company-tide)
-
+  (set-company-backend! 'tide-mode 'company-tide)
   ;; navigation
-  (set! :lookup 'tide-mode
+  (set-lookup-handlers! 'tide-mode
     :definition #'tide-jump-to-definition
     :references #'tide-references
     :documentation #'tide-documentation-at-point)
-
   ;; resolve to `doom-project-root' if `tide-project-root' fails
   (advice-add #'tide-project-root :override #'+javascript*tide-project-root)
-
   ;; cleanup tsserver when no tide buffers are left
   (add-hook! 'tide-mode-hook
     (add-hook 'kill-buffer-hook #'+javascript|cleanup-tide-processes nil t))
@@ -142,13 +187,7 @@
 (def-package! xref-js2
   :when (featurep! :feature lookup)
   :commands xref-js2-xref-backend
-  :init (set! :lookup 'js2-mode :xref-backend #'xref-js2-xref-backend))
-
-
-(def-package! nodejs-repl
-  :commands nodejs-repl
-  :init
-  (set! :repl 'js2-mode #'+javascript/repl))
+  :init (set-lookup-handlers! 'js2-mode :xref-backend #'xref-js2-xref-backend))
 
 
 (def-package! js2-refactor
@@ -163,50 +202,38 @@
    js2r-debug-this js2r-forward-slurp js2r-forward-barf))
 
 
-(def-package! web-beautify
-  :commands web-beautify-js
-  :init
-  (map! :map* (json-mode js2-mode-map) :n "gQ" #'web-beautify-js))
-
-
 (def-package! eslintd-fix
-  :commands (eslintd-fix-mode eslintd-fix)
+  :commands eslintd-fix
   :config
-  (add-hook! 'eslintd-fix-mode-hook
-    (setq flycheck-javascript-eslint-executable eslintd-fix-executable)))
+  (defun +javascript|set-flycheck-executable-to-eslint ()
+    (setq flycheck-javascript-eslint-executable eslintd-fix-executable))
+  (add-hook 'eslintd-fix-mode-hook #'+javascript|set-flycheck-executable-to-eslint))
 
 
-(def-package! skewer-mode
-  :commands (skewer-mode run-skewer)
-  :config
-  (map! :map skewer-mode-map
+;; `skewer-mode'
+(map! (:after skewer-mode
+        :map skewer-mode-map
         :localleader
         :n "sE" #'skewer-eval-last-expression
         :n "se" #'skewer-eval-defun
-        :n "sf" #'skewer-load-buffer))
+        :n "sf" #'skewer-load-buffer)
 
-
-(def-package! skewer-css ; in skewer-mode
-  :commands skewer-css-mode
-  :config
-  (map! :map skewer-css-mode-map
+      (:after skewer-css
+        :map skewer-css-mode-map
         :localleader
         :n "se" #'skewer-css-eval-current-declaration
         :n "sr" #'skewer-css-eval-current-rule
         :n "sb" #'skewer-css-eval-buffer
-        :n "sc" #'skewer-css-clear-all))
+        :n "sc" #'skewer-css-clear-all)
 
-
-(def-package! skewer-html ; in skewer-mode
-  :commands skewer-html-mode
-  :config
-  (map! :map skewer-html-mode-map
+      (:after skewer-html
+        :map skewer-html-mode-map
         :localleader
         :n "se" #'skewer-html-eval-tag))
 
 
-(def-package! skewer-repl
-  :commands skewer-repl)
+;; `web-beautify'
+(map! :map* (json-mode-map js2-mode-map) :n "gQ" #'web-beautify-js)
 
 
 ;;
@@ -214,16 +241,16 @@
 ;;
 
 (def-project-mode! +javascript-screeps-mode
-  :match "/screeps\\(-ai\\)?/.+$"
+  :match "/screeps\\(?:-ai\\)?/.+$"
   :modes (+javascript-npm-mode)
   :add-hooks (+javascript|init-screeps-mode)
-  :on-load (load! +screeps))
+  :on-load (load! "+screeps"))
 
 (def-project-mode! +javascript-gulp-mode
-  :files "gulpfile.js")
+  :files ("gulpfile.js"))
 
 (def-project-mode! +javascript-npm-mode
   :modes (html-mode css-mode web-mode js2-mode markdown-mode)
-  :files "package.json"
+  :files ("package.json")
   :add-hooks (+javascript|add-node-modules-path))
 

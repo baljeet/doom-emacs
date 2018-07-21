@@ -1,14 +1,24 @@
 ;;; ui/doom-dashboard/config.el -*- lexical-binding: t; -*-
 
-(defvar +doom-dashboard-name " *doom*"
+(defvar +doom-dashboard-name "*doom*"
   "The name to use for the dashboard buffer.")
 
-(defvar +doom-dashboard-functions '(doom-dashboard-widget-banner
-                                    doom-dashboard-widget-shortmenu
-                                    doom-dashboard-widget-loaded)
+(defvar +doom-dashboard-functions
+  '(doom-dashboard-widget-banner
+    doom-dashboard-widget-shortmenu
+    doom-dashboard-widget-loaded
+    doom-dashboard-widget-footer)
   "List of widget functions to run in the dashboard buffer to construct the
 dashboard. These functions take no arguments and the dashboard buffer is current
 while they run.")
+
+;; (defvar +doom-dashboard-banner-file "e.png"
+;;   "The path to the image file to be used in on the dashboard. The path is
+;; relative to modules/ui/doom-dashboard/banners/. If nil, always use the ASCII
+;; banner.")
+
+;; (defvar +doom-dashboard-banner-dir (concat (DIR!) "banners/")
+;;   "Where to look for `+doom-dashboard-banner-file'.")
 
 (defvar +doom-dashboard-inhibit-refresh nil
   "If non-nil, the doom buffer won't be refreshed.")
@@ -29,10 +39,56 @@ Possible values:
   a STRING       a fixed path
   nil            `default-directory' will never change")
 
+(defvar +doom-dashboard-menu-sections
+  '(("Reload last session"
+     :icon (all-the-icons-octicon "history" :face 'font-lock-keyword-face)
+     :when (and (bound-and-true-p persp-mode)
+                (file-exists-p (expand-file-name persp-auto-save-fname
+                                                 persp-save-dir)))
+     :face (:inherit (font-lock-keyword-face bold))
+     :action +workspace/load-last-session)
+    ("See agenda for this week"
+     :icon (all-the-icons-octicon "calendar" :face 'font-lock-keyword-face)
+     :when (fboundp 'org-agenda-list)
+     :action org-agenda-list)
+    ("Recently opened files"
+     :icon (all-the-icons-octicon "file-text" :face 'font-lock-keyword-face)
+     :action recentf-open-files)
+    ("Open project"
+     :icon (all-the-icons-octicon "briefcase" :face 'font-lock-keyword-face)
+     :action projectile-switch-project)
+    ("Jump to bookmark"
+     :icon (all-the-icons-octicon "bookmark" :face 'font-lock-keyword-face)
+     :action bookmark-jump)
+    ("Open private configuration"
+     :icon (all-the-icons-octicon "tools" :face 'font-lock-keyword-face)
+     :when (file-directory-p doom-private-dir)
+     :action +default/find-in-config)
+    ("Open user manual"
+     :icon (all-the-icons-octicon "book" :face 'font-lock-keyword-face)
+     :when (file-exists-p (expand-file-name "index.org" doom-docs-dir))
+     :action doom/open-manual))
+  "An alist of menu buttons used by `doom-dashboard-widget-shortmenu'. Each
+element is a cons cell (LABEL . PLIST). LABEL is a string to display after the
+icon and before the key string.
+
+PLIST can have the following properties:
+
+  :icon FORM
+    Uses the return value of FORM as an icon (can be literal string).
+  :key STRING
+    The keybind displayed next to the button.
+  :when FORM
+    If FORM returns nil, don't display this button.
+  :face FACE
+    Displays the icon and text with FACE (a face symbol).
+  :action FORM
+    Run FORM when the button is pushed.")
+
 ;;
 (defvar +doom-dashboard--last-cwd nil)
 (defvar +doom-dashboard--width 80)
-(defvar +doom-dashboard--height 0)
+(defvar +doom-dashboard--hoffset 2)
 (defvar +doom-dashboard--old-fringe-indicator fringe-indicator-alist)
 (defvar +doom-dashboard--pwd-alist ())
 
@@ -63,36 +119,50 @@ Possible values:
         buffer-read-only t)
   (setq-local whitespace-style nil)
   (setq-local show-trailing-whitespace nil)
+  (setq-local hscroll-margin 0)
+  (setq-local tab-width 2)
   (cl-loop for (car . _cdr) in fringe-indicator-alist
            collect (cons car nil) into alist
            finally do (setq fringe-indicator-alist alist))
   (add-hook 'post-command-hook #'+doom-dashboard|reposition-point nil t))
 
-(map! :map +doom-dashboard-mode-map
-      "n"            #'forward-button
-      :gn [down]     #'forward-button
-      :gn "C-n"      #'forward-button
-      :gn [tab]      #'forward-button
-      :gn "TAB"      #'forward-button
-      "p"            #'backward-button
-      :gn [up]       #'backward-button
-      :gn "C-p"      #'backward-button
-      :gn [backtab]  #'backward-button
-      :gn "S-TAB"    #'backward-button
-      (:when (featurep! :feature evil)
-        :m "j" #'forward-button
-        :m "k" #'backward-button
+(define-key! +doom-dashboard-mode-map
+  [remap forward-button]  #'+doom-dashboard/forward-button
+  [remap backward-button] #'+doom-dashboard/backward-button
+  "n"       #'forward-button
+  "p"       #'backward-button
+  "\C-n"    #'forward-button
+  "\C-p"    #'backward-button
+  [down]    #'forward-button
+  [up]      #'backward-button
+  [tab]     #'forward-button
+  [backtab] #'backward-button)
 
-        [remap evil-delete]        #'ignore
-        [remap evil-delete-line]   #'ignore
-        [remap evil-insert]        #'ignore
-        [remap evil-append]        #'ignore
-        [remap evil-replace]       #'ignore
-        [remap evil-replace-state] #'ignore
-        [remap evil-change]        #'ignore
-        [remap evil-change-line]   #'ignore
-        [remap evil-visual-char]   #'ignore
-        [remap evil-visual-line]   #'ignore))
+(when (featurep 'evil)
+  (evil-define-key* 'normal +doom-dashboard-mode-map
+    "j" #'forward-button
+    "k" #'backward-button
+    "n"       #'forward-button
+    "p"       #'backward-button
+    "\C-n"    #'forward-button
+    "\C-p"    #'backward-button
+    [down]    #'forward-button
+    [up]      #'backward-button
+    [tab]     #'forward-button
+    [backtab] #'backward-button)
+  (define-key! +doom-dashboard-mode-map
+    [remap evil-next-visual-line]     #'forward-button
+    [remap evil-previous-visual-line] #'backward-button
+    [remap evil-delete]        #'ignore
+    [remap evil-delete-line]   #'ignore
+    [remap evil-insert]        #'ignore
+    [remap evil-append]        #'ignore
+    [remap evil-replace]       #'ignore
+    [remap evil-replace-state] #'ignore
+    [remap evil-change]        #'ignore
+    [remap evil-change-line]   #'ignore
+    [remap evil-visual-char]   #'ignore
+    [remap evil-visual-line]   #'ignore))
 
 
 ;;
@@ -114,15 +184,17 @@ Possible values:
 
 (defun +doom-dashboard|init ()
   "Initializes Doom's dashboard."
-  (add-hook 'window-configuration-change-hook #'+doom-dashboard|resize)
-  (add-hook 'kill-buffer-query-functions #'+doom-dashboard|reload-on-kill)
-  (add-hook 'doom-after-switch-buffer-hook #'+doom-dashboard|reload-on-kill)
-  (unless (daemonp)
-    (add-hook 'after-make-frame-functions #'+doom-dashboard|make-frame))
-  ;; `persp-mode' integration: update `default-directory' when switching
-  (add-hook 'persp-created-functions #'+doom-dashboard|record-project)
-  (add-hook 'persp-activated-functions #'+doom-dashboard|detect-project)
-  (add-hook 'persp-before-switch-functions #'+doom-dashboard|record-project)
+  (unless noninteractive
+    (add-hook 'window-configuration-change-hook #'+doom-dashboard|resize)
+    (add-hook 'window-size-change-functions #'+doom-dashboard|resize)
+    (add-hook 'kill-buffer-query-functions #'+doom-dashboard|reload-on-kill)
+    (add-hook 'doom-enter-buffer-hook #'+doom-dashboard|reload-on-kill)
+    (unless (daemonp)
+      (add-hook 'after-make-frame-functions #'+doom-dashboard|make-frame))
+    ;; `persp-mode' integration: update `default-directory' when switching
+    (add-hook 'persp-created-functions #'+doom-dashboard|record-project)
+    (add-hook 'persp-activated-functions #'+doom-dashboard|detect-project)
+    (add-hook 'persp-before-switch-functions #'+doom-dashboard|record-project))
   (+doom-dashboard-reload t))
 
 (defun +doom-dashboard|reload-on-kill ()
@@ -146,12 +218,29 @@ If this is the dashboard buffer, reload the dashboard."
 whose dimensions may not be fully initialized by the time this is run."
   (run-with-timer 0.1 nil #'+doom-dashboard/open frame))
 
-(defun +doom-dashboard|resize ()
-  "Resize the margins and fringes on dashboard windows."
-  (dolist (win (get-buffer-window-list (doom-fallback-buffer) nil t))
-    (set-window-fringes win 0 0)
-    (set-window-margins
-     win (max 0 (/ (- (window-total-width win) +doom-dashboard--width) 2)))))
+(defun +doom-dashboard|resize (&rest _)
+  "Recenter the dashboard, and reset its margins and fringes."
+  (let ((windows (get-buffer-window-list (doom-fallback-buffer) nil t)))
+    (dolist (win windows)
+      (set-window-start win 0)
+      (set-window-fringes win 0 0)
+      (set-window-margins
+       win (max 0 (/ (- (window-total-width win) +doom-dashboard--width) 2))))
+    (when windows
+      (with-current-buffer (doom-fallback-buffer)
+        (save-excursion
+          (with-silent-modifications
+            (goto-char (point-min))
+            (delete-region (line-beginning-position)
+                           (save-excursion (skip-chars-forward "\n")
+                                           (point)))
+            (insert (make-string
+                     (max 0 (- (/ (window-height (get-buffer-window)) 2)
+                               (truncate (/ (+ (count-lines (point-min) (point-max))
+                                               +doom-dashboard--hoffset)
+                                            2))))
+                     ?\n)
+                    "\n")))))))
 
 (defun +doom-dashboard|detect-project (&rest _)
   "Check for a `last-project-root' parameter in the perspective, and set the
@@ -179,13 +268,13 @@ project (which may be different across perspective)."
 
 (defun +doom-dashboard-initial-buffer ()
   "Returns buffer to display on startup. Designed for `initial-buffer-choice'."
-  (if (doom-real-buffer-p)
-      (current-buffer)
-    (doom-fallback-buffer)))
+  (if (string-match-p "^ ?\\*\\(?:scratch\\|server\\)" (buffer-name))
+      (get-buffer-create +doom-dashboard-name)
+    (current-buffer)))
 
 (defun +doom-dashboard-p (buffer)
   "Returns t if BUFFER is the dashboard buffer."
-  (eq buffer (doom-fallback-buffer)))
+  (eq buffer (get-buffer +doom-dashboard-name)))
 
 (defun +doom-dashboard-update-pwd (&optional pwd)
   "Update `default-directory' in the Doom dashboard buffer. What it is set to is
@@ -212,13 +301,10 @@ controlled by `+doom-dashboard-pwd-policy'."
           (unless (eq major-mode '+doom-dashboard-mode)
             (+doom-dashboard-mode))
           (erase-buffer)
-          (save-excursion (mapc #'funcall +doom-dashboard-functions))
-          (insert
-           (make-string (max 0 (- (/ (window-height (get-buffer-window)) 2)
-                                  (/ (count-lines (point-min) (point-max)) 2)))
-                        ?\n))))
-      (+doom-dashboard|detect-project)
+          (insert "\n")
+          (run-hooks '+doom-dashboard-functions)))
       (+doom-dashboard|resize)
+      (+doom-dashboard|detect-project)
       (+doom-dashboard-update-pwd)
       (current-buffer))))
 
@@ -256,29 +342,46 @@ controlled by `+doom-dashboard-pwd-policy'."
 ;;
 
 (defun doom-dashboard-widget-banner ()
-  (mapc (lambda (line)
-          (insert (propertize (+doom-dashboard--center +doom-dashboard--width line)
-                              'face 'font-lock-comment-face) " ")
-          (insert "\n"))
-        '("=================     ===============     ===============   ========  ========"
-          "\\\\ . . . . . . .\\\\   //. . . . . . .\\\\   //. . . . . . .\\\\  \\\\. . .\\\\// . . //"
-          "||. . ._____. . .|| ||. . ._____. . .|| ||. . ._____. . .|| || . . .\\/ . . .||"
-          "|| . .||   ||. . || || . .||   ||. . || || . .||   ||. . || ||. . . . . . . ||"
-          "||. . ||   || . .|| ||. . ||   || . .|| ||. . ||   || . .|| || . | . . . . .||"
-          "|| . .||   ||. _-|| ||-_ .||   ||. . || || . .||   ||. _-|| ||-_.|\\ . . . . ||"
-          "||. . ||   ||-'  || ||  `-||   || . .|| ||. . ||   ||-'  || ||  `|\\_ . .|. .||"
-          "|| . _||   ||    || ||    ||   ||_ . || || . _||   ||    || ||   |\\ `-_/| . ||"
-          "||_-' ||  .|/    || ||    \\|.  || `-_|| ||_-' ||  .|/    || ||   | \\  / |-_.||"
-          "||    ||_-'      || ||      `-_||    || ||    ||_-'      || ||   | \\  / |  `||"
-          "||    `'         || ||         `'    || ||    `'         || ||   | \\  / |   ||"
-          "||            .===' `===.         .==='.`===.         .===' /==. |  \\/  |   ||"
-          "||         .=='   \\_|-_ `===. .==='   _|_   `===. .===' _-|/   `==  \\/  |   ||"
-          "||      .=='    _-'    `-_  `='    _-'   `-_    `='  _-'   `-_  /|  \\/  |   ||"
-          "||   .=='    _-'          '-__\\._-'         '-_./__-'         `' |. /|  |   ||"
-          "||.=='    _-'                                                     `' |  /==.||"
-          "=='    _-'                         E M A C S                          \\/   `=="
-          "\\   _-'                                                                `-_   /"
-          " `''                                                                      ``'")))
+  (let ((point (point)))
+    (mapc (lambda (line)
+            (insert (propertize (+doom-dashboard--center +doom-dashboard--width line)
+                                'face 'font-lock-comment-face) " ")
+            (insert "\n"))
+          '("=================     ===============     ===============   ========  ========"
+            "\\\\ . . . . . . .\\\\   //. . . . . . .\\\\   //. . . . . . .\\\\  \\\\. . .\\\\// . . //"
+            "||. . ._____. . .|| ||. . ._____. . .|| ||. . ._____. . .|| || . . .\\/ . . .||"
+            "|| . .||   ||. . || || . .||   ||. . || || . .||   ||. . || ||. . . . . . . ||"
+            "||. . ||   || . .|| ||. . ||   || . .|| ||. . ||   || . .|| || . | . . . . .||"
+            "|| . .||   ||. _-|| ||-_ .||   ||. . || || . .||   ||. _-|| ||-_.|\\ . . . . ||"
+            "||. . ||   ||-'  || ||  `-||   || . .|| ||. . ||   ||-'  || ||  `|\\_ . .|. .||"
+            "|| . _||   ||    || ||    ||   ||_ . || || . _||   ||    || ||   |\\ `-_/| . ||"
+            "||_-' ||  .|/    || ||    \\|.  || `-_|| ||_-' ||  .|/    || ||   | \\  / |-_.||"
+            "||    ||_-'      || ||      `-_||    || ||    ||_-'      || ||   | \\  / |  `||"
+            "||    `'         || ||         `'    || ||    `'         || ||   | \\  / |   ||"
+            "||            .===' `===.         .==='.`===.         .===' /==. |  \\/  |   ||"
+            "||         .=='   \\_|-_ `===. .==='   _|_   `===. .===' _-|/   `==  \\/  |   ||"
+            "||      .=='    _-'    `-_  `='    _-'   `-_    `='  _-'   `-_  /|  \\/  |   ||"
+            "||   .=='    _-'          '-__\\._-'         '-_./__-'         `' |. /|  |   ||"
+            "||.=='    _-'                                                     `' |  /==.||"
+            "=='    _-'                         E M A C S                          \\/   `=="
+            "\\   _-'                                                                `-_   /"
+            " `''                                                                      ``'"))
+    ;; TODO Add Doom logo
+    ;; (when (and +doom-dashboard-banner-file (display-graphic-p))
+    ;;   (let* ((image (create-image (expand-file-name +doom-dashboard-banner-file
+    ;;                                                 +doom-dashboard-banner-dir)
+    ;;                               'png nil))
+    ;;          (size (image-size image))
+    ;;          (margin (+ 1 (/ (- +doom-dashboard--width (car size)) 2))))
+    ;;     (setq +doom-dashboard--hoffset (- (cdr size) 2))
+    ;;     (add-text-properties
+    ;;      point (point) `(display ,image rear-nonsticky (display)))
+    ;;     (when (> margin 0)
+    ;;       (save-excursion
+    ;;         (goto-char point)
+    ;;         (insert (make-string (truncate margin) ? )))))
+    ;;   (insert "\n\n\n\n"))
+    ))
 
 (defun doom-dashboard-widget-loaded ()
   (insert
@@ -286,47 +389,69 @@ controlled by `+doom-dashboard-pwd-policy'."
    (propertize
     (+doom-dashboard--center
      +doom-dashboard--width
-     (doom-packages--benchmark))
+     (doom|display-benchmark 'return))
     'face 'font-lock-comment-face)
-   "\n\n"))
+   "\n"))
 
 (defun doom-dashboard-widget-shortmenu ()
   (let ((all-the-icons-scale-factor 1.45)
         (all-the-icons-default-adjust -0.02))
     (insert "\n")
-    (mapc (lambda (btn)
-            (when btn
-              (cl-destructuring-bind (label icon fn) btn
-                (insert
-                 (with-temp-buffer
-                   (insert-text-button
-                    (concat (all-the-icons-octicon icon :face 'font-lock-keyword-face)
-                            (propertize (concat " " label) 'face 'font-lock-keyword-face))
-                    'action `(lambda (_) ,fn)
-                    'follow-link t)
-                   (+doom-dashboard--center (- +doom-dashboard--width 2) (buffer-string)))
-                 "\n\n"))))
-          `(("Homepage" "mark-github"
-             (browse-url "https://github.com/hlissner/doom-emacs"))
-            ,(when (and (featurep! :feature workspaces)
-                        (file-exists-p (expand-file-name persp-auto-save-fname persp-save-dir)))
-               '("Reload last session" "history"
-                 (+workspace/load-session)))
-            ,(when (featurep! :lang org)
-               '("See agenda for this week" "calendar"
-                 (call-interactively #'org-agenda-list)))
-            ("Recently opened files" "file-text"
-             (call-interactively (or (command-remapping #'recentf-open-files)
-                                     #'recentf-open-files)))
-            ("Open project" "briefcase"
-             (call-interactively (or (command-remapping #'projectile-switch-project)
-                                     #'projectile-switch-project)))
-            ("Jump to bookmark" "bookmark"
-             (call-interactively (or (command-remapping #'bookmark-jump)
-                                     #'bookmark-jump)))
-            ,(when (file-directory-p doom-private-dir)
-               '("Open private configuration" "tools"
-                 (doom-project-find-file doom-private-dir)))
-            ("Edit my modules list" "settings"
-             (progn (make-directory doom-private-dir t)
-                    (find-file (expand-file-name "init.el" doom-private-dir))))))))
+    (dolist (section +doom-dashboard-menu-sections)
+      (cl-destructuring-bind (label &key icon action when face) section
+        (when (and (fboundp action)
+                   (or (null when)
+                       (eval when t)))
+          (insert
+           (+doom-dashboard--center
+            (- +doom-dashboard--width 1)
+            (let ((icon (if (stringp icon) icon (eval icon t))))
+              (format (format "%s%%s%%-10s" (if icon "%3s\t" "%3s"))
+                      (or icon "")
+                      (with-temp-buffer
+                        (insert-text-button
+                         label
+                         'action
+                         `(lambda (_)
+                            (call-interactively (or (command-remapping #',action)
+                                                    #',action)))
+                         'face (or face 'font-lock-keyword-face)
+                         'follow-link t
+                         'help-echo label)
+                        (format "%-37s" (buffer-string)))
+                      ;; Lookup command keys dynamically
+                      (or (let ((maps (list global-map)))
+                            (when (bound-and-true-p evil-normal-state-map)
+                              (push evil-motion-state-map maps)
+                              (push evil-normal-state-map maps))
+                            (when-let* ((key (where-is-internal action maps t)))
+                              (propertize (with-temp-buffer
+                                            (save-excursion (insert (key-description key)))
+                                            (while (re-search-forward "<\\([^>]+\\)>" nil t)
+                                              (replace-match (upcase (substring (match-string 1) 0 3))))
+                                            (buffer-string))
+                                          'face 'font-lock-constant-face)))
+                          ""))))
+           (if (display-graphic-p)
+               "\n\n"
+             "\n")))))))
+
+(defun doom-dashboard-widget-footer ()
+  (insert
+   "\n"
+   (+doom-dashboard--center
+    (- +doom-dashboard--width 2)
+    (with-temp-buffer
+      ;; TODO Publish the site!
+      ;; (insert-text-button (propertize "doomemacs.org" 'face 'font-lock-keyword-face)
+      ;;                     'action (lambda (_) (browse-url "http://doomemacs.org"))
+      ;;                     'follow-link t
+      ;;                     'help-echo "Open home page")
+      ;; (insert (propertize " x " 'face 'font-lock-comment-face))
+      (insert-text-button (or (all-the-icons-octicon "octoface" :face 'all-the-icons-green :height 1.3 :v-adjust -0.15)
+                              (propertize "github" 'face 'font-lock-keyword-face))
+                          'action (lambda (_) (browse-url "https://github.com/hlissner/doom-emacs"))
+                          'follow-link t
+                          'help-echo "Open github page")
+      (buffer-string)))
+   "\n"))
